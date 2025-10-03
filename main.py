@@ -1,5 +1,4 @@
-#hi
-
 import streamlit as st
 
-st.write("hi")
+pressed = st.button("Press me")
+print(pressed)
