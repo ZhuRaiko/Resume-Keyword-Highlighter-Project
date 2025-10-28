@@ -1,10 +1,13 @@
 import streamlit as st
 from sentence_transformers import SentenceTransformer
 from textblob import TextBlob
-from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
 import spacy
 import numpy as np
+import pandas as pd
 import re
+import os
+import joblib
 
 # --- Load models once ---
 @st.cache_resource
@@ -47,48 +50,34 @@ RECRUITER_KEYWORDS = [
     "certified", "results-driven", "innovation", "initiative", "performance",
     "strategic", "deliverables", "optimization", "goal-oriented", "motivated",
     "analytical", "proactive", "efficient", "collaborative", "leadership",
-    "cross-functional", "stakeholder", "scalable", "impact", "roi"
+    "cross-functional", "stakeholder", "scalable", "impact", "ROI"
 ]
 
-SELF_PROMO_EXAMPLES = [
-    "Led a cross-functional team to deliver key business initiatives ahead of schedule.",
-    "Recognized for outstanding leadership and consistent achievement of targets.",
-    "Awarded for excellence in innovation and customer satisfaction.",
-    "Increased operational efficiency by 30% through process optimization.",
-    "Spearheaded a company-wide training program improving team productivity.",
-    "Developed and deployed a scalable solution that reduced costs by 25%.",
-    "Implemented new strategies that enhanced client retention rates.",
-    "Created and managed high-impact marketing campaigns across digital channels.",
-    "Drove a 40% growth in revenue by improving sales processes and customer engagement.",
-    "Streamlined workflows, resulting in faster project delivery and improved quality."
-]
-
-# --- Add weak examples for contrast ---
-WEAK_EXAMPLES = [
-    "Responsible for handling tasks as assigned.",
-    "Worked with a team to complete daily duties.",
-    "Assisted in project development and provided support.",
-    "Participated in meetings and discussions with colleagues.",
-    "Helped with documentation and data entry.",
-    "Performed regular maintenance checks as required.",
-    "Handled customer inquiries and escalated issues.",
-    "Supported team operations through assigned responsibilities.",
-    "Maintained files and updated records as needed.",
-    "Completed assigned work within deadlines."
-]
-
-# --- Train logistic regression classifier ---
+# --- Load or train KNN model ---
 @st.cache_resource
-def train_selfpromo_model():
-    strong_emb = bert_model.encode(SELF_PROMO_EXAMPLES)
-    weak_emb = bert_model.encode(WEAK_EXAMPLES)
-    X_train = np.vstack([strong_emb, weak_emb])
-    y_train = np.array([1] * len(strong_emb) + [0] * len(weak_emb))
-    clf = LogisticRegression(max_iter=1000)
-    clf.fit(X_train, y_train)
-    return clf
+def load_or_train_knn():
+    model_path = "knn_model.pkl"
+    csv_path = "self_promotion_dataset.csv"
 
-promo_model = train_selfpromo_model()
+    if os.path.exists(model_path):
+        knn = joblib.load(model_path)
+        return knn
+
+    if not os.path.exists(csv_path):
+        st.error("Missing 'self_promotion_dataset.csv' — please add it to your project folder.")
+        st.stop()
+
+    df = pd.read_csv(csv_path)
+    df = df.dropna(subset=["sentence", "label"])
+    X_train = bert_model.encode(df["sentence"].tolist())
+    y_train = df["label"].astype(int).values
+
+    knn = KNeighborsClassifier(n_neighbors=5)
+    knn.fit(X_train, y_train)
+    joblib.dump(knn, model_path)
+    return knn
+
+knn_model = load_or_train_knn()
 
 # --- Helper functions ---
 def has_metric(sentence):
@@ -97,42 +86,21 @@ def has_metric(sentence):
 def sentiment_score(sentence):
     return TextBlob(sentence).sentiment.polarity
 
-def uses_pronoun(sentence):
-    return any(p in sentence.lower() for p in [" i ", " my ", " me "])
-
-# --- Improved self-promotion scoring ---
 def self_promotion_score(sentence):
-    s = sentence.lower()
-    base_score = 0.0
-
-    if any(v in s for v in ACTION_VERBS):
-        base_score += 0.4
-    if has_metric(sentence):
-        base_score += 0.3
-    if any(skill in s for skill in HARD_SKILLS):
-        base_score += 0.2
-    if any(word in s for word in RECRUITER_KEYWORDS):
-        base_score += 0.1
-    if sentiment_score(sentence) > 0.05:
-        base_score += 0.1
-    if uses_pronoun(sentence):
-        base_score -= 0.1
-    if len(sentence.split()) > 12:
-        base_score += 0.1
-
-    base_score = max(0, min(1, base_score))
-
-    # --- Learned model prediction ---
     vec = bert_model.encode([sentence])
-    learned_prob = promo_model.predict_proba(vec)[0, 1]
-
-    combined = (base_score * 0.4) + (learned_prob * 0.6)
-    return max(0, min(1, combined))
+    if hasattr(knn_model, "predict_proba"):
+        prob = knn_model.predict_proba(vec)[0][1]
+    else:
+        prob = knn_model.predict(vec)[0]
+    return float(prob)
 
 def analyze_self_promotion(text):
     doc = nlp(text)
-    results = [(sent.text, self_promotion_score(sent.text)) for sent in doc.sents]
-    avg_score = np.mean([r[1] for r in results]) if results else 0
+    results = []
+    for sent in doc.sents:
+        score = self_promotion_score(sent.text)
+        results.append((sent.text.strip(), score))
+    avg_score = np.mean([s for _, s in results]) if results else 0
     return results, avg_score
 
 def count_keywords(text):
@@ -156,9 +124,8 @@ def highlight_keywords(text):
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="SkillHighlight Analyzer", layout="wide")
-
 st.title("SkillHighlight: Resume Self-Promotion Analyzer")
-st.write("Upload a resume file or paste text below to see the analysis.")
+st.write("Upload a resume or paste text to analyze your self-promotion and skills balance.")
 
 uploaded = st.file_uploader("Upload your resume (PDF, DOCX, TXT):", type=["pdf", "docx", "txt"])
 text_input = st.text_area("Or paste resume text here:")
@@ -183,7 +150,7 @@ if text:
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        st.subheader("Extracted / Input Text:")
+        st.subheader("Extracted / Input Text")
         st.markdown(f"<div style='line-height:1.6; font-size:16px;'>{highlight_keywords(text)}</div>", unsafe_allow_html=True)
 
     with col2:
@@ -200,22 +167,22 @@ if text:
                 <div style='width:{rec_pct}%; background-color:#ff9800; height:10px; border-radius:6px;'></div></div></div>
         """, unsafe_allow_html=True)
 
-    st.subheader(f"Self-Promotion Score: {avg_score:.2f}")
+    st.subheader(f"Overall Self-Promotion Score: {avg_score:.2f}")
     if avg_score > 0.8:
-        st.success("Excellent self-promotion! Your resume communicates achievements strongly.")
+        st.success("Excellent self-promotion! Your resume effectively showcases achievements.")
     elif avg_score > 0.5:
-        st.info("Good self-promotion. You can enhance it by adding more action verbs or measurable results.")
+        st.info("Good self-promotion. You can further strengthen it with more measurable results or leadership verbs.")
     else:
-        st.warning("Weak self-promotion detected. Try using action verbs and quantifiable outcomes.")
+        st.warning("Weak self-promotion. Add stronger action verbs, metrics, and self-achievement phrasing.")
 
-    st.subheader("Sentence Analysis (sorted by score):")
+    st.subheader("Sentence Analysis (sorted by score)")
     for sent, score in sorted(results, key=lambda x: x[1], reverse=True):
         color = "#2e7d32" if score > 0.8 else "#f9a825" if score > 0.5 else "#c62828"
         st.markdown(
-            f"<div style='background-color:{color}; color:white; padding:10px; border-radius:8px; margin:6px 0;'>{sent} "
+            f"<div style='background-color:{color}; color:white; padding:10px; border-radius:8px; margin:6px 0;'>{sent}"
             f"<span style='float:right; font-size:13px;'>Score: {score:.2f}</span></div>",
             unsafe_allow_html=True
         )
 
 else:
-    st.info("Upload a file or paste text to begin analysis.")
+    st.info("Upload a file or paste resume text to begin analysis.")
