@@ -8,6 +8,8 @@ import pandas as pd
 import re
 import os
 import joblib
+import torch
+import torch.nn as nn   # >>> ADDED for BiLSTM
 
 # --- Load models once ---
 @st.cache_resource
@@ -37,7 +39,7 @@ SOFT_SKILLS = [
 ]
 
 HARD_SKILLS = [
-    "python", "java", "javascript", "typescript", "react", "node.js", "html", "css", "sql", "docker",
+    "python", "c++", "java", "javascript", "typescript", "react", "node.js", "html", "css", "sql", "docker",
     "kubernetes", "aws", "azure", "gcp", "git", "linux",
     "machine learning", "deep learning", "data analysis", "data visualization",
     "pandas", "numpy", "tensorflow", "pytorch", "statistics", "data engineering",
@@ -79,6 +81,41 @@ def load_or_train_knn():
 
 knn_model = load_or_train_knn()
 
+# >>> ADDED for BiLSTM
+class BiLSTM(nn.Module):
+    def __init__(self, hidden=128):
+        super().__init__()
+        self.embedding = nn.Embedding(30522, 128)
+        self.lstm = nn.LSTM(128, hidden, batch_first=True, bidirectional=True)
+        self.dropout = nn.Dropout(0.3)
+        self.fc = nn.Linear(hidden * 2, 1)
+
+    def forward(self, input_ids):
+        x = self.embedding(input_ids)
+        x, _ = self.lstm(x)
+        x = self.dropout(x[:, -1, :])
+        return torch.sigmoid(self.fc(x))
+
+@st.cache_resource
+def load_bilstm():
+    model = BiLSTM()
+    if os.path.exists("bilstm_selfpromo.pt"):
+        model.load_state_dict(torch.load("bilstm_selfpromo.pt", map_location="cpu"))
+    model.eval()
+    return model
+
+# tokenizer reused from sentence-transformer (wordpiece)
+from transformers import BertTokenizer
+bilstm_tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+bilstm_model = load_bilstm()
+
+def bilstm_self_promotion_score(sentence):
+    tokens = bilstm_tokenizer(sentence, return_tensors="pt", truncation=True, padding=True)
+    with torch.no_grad():
+        prob = bilstm_model(tokens["input_ids"]).item()
+    return float(prob)
+# <<< END OF ADDED
+
 # --- Helper functions ---
 def has_metric(sentence):
     return bool(re.search(r"(\b\d+%|\b\d{1,3}\b|\$\d+[kKmM]?)", sentence))
@@ -94,12 +131,98 @@ def self_promotion_score(sentence):
         prob = knn_model.predict(vec)[0]
     return float(prob)
 
+def smart_split(text):
+    # Improved smart_split to reduce UI clutter when displaying many tiny segments:
+    # - normalize bullets and dashes
+    # - group consecutive bullets into a single 'bullet block' segment
+    # - skip contact lines (email/phone/urls) which are noise for scoring/display
+    # - merge very short fragments with previous segment to avoid many tiny boxes
+    text = text.replace("•", "\n• ").replace("– ", "- ").replace("—", " - ")
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+
+    segments = []
+    buffer = ""
+    bullet_block = []
+
+    contact_re = re.compile(r"\b[\w\.-]+@[\w\.-]+\.[a-zA-Z]{2,}\b|https?://|www\.|\b\+?\d[\d\-\s\(\)]{6,}\d\b")
+    header_re = re.compile(r"^(experience|career|summary|education|skills|projects|page)\b", re.IGNORECASE)
+
+    def flush_buffer():
+        nonlocal buffer
+        if buffer:
+            segments.append(buffer.strip())
+            buffer = ""
+
+    def flush_bullets():
+        nonlocal bullet_block
+        if bullet_block:
+            # join bullets into a single segment to avoid dozens of tiny boxes
+            segments.append(" • ".join(bullet_block))
+            bullet_block = []
+
+    for line in lines:
+        # bullet lines -> collect
+        if line.startswith(("-", "*", "•")):
+            # remove leading bullet chars/spaces
+            b = re.sub(r"^[-*•\s]+", "", line)
+            bullet_block.append(b)
+            continue
+
+        # encountered non-bullet: flush any collected bullets first
+        flush_bullets()
+
+        # section headers / page titles -> act as strong separators
+        if header_re.match(line):
+            flush_buffer()
+            segments.append(line)
+            continue
+
+        # skip contact lines (email, phone, urls) entirely to reduce clutter
+        if contact_re.search(line):
+            # do not add to buffer; continue
+            continue
+
+        # short standalone lines (likely headings or short labels)
+        if len(line) < 45 and not line.endswith("."):
+            flush_buffer()
+            segments.append(line)
+            continue
+
+        # normal text -> accumulate until a period ends the block
+        buffer += (" " + line)
+        if line.endswith("."):
+            flush_buffer()
+
+    # final flushes
+    flush_bullets()
+    flush_buffer()
+
+    # Post-process: merge very short segments with previous to avoid tiny boxes
+    final_segments = []
+    for seg in segments:
+        s = seg.strip()
+        if not s:
+            continue
+        # if segment is very short, merge with previous if possible
+        if len(s) < 25 and final_segments and not header_re.match(final_segments[-1]):
+            final_segments[-1] = final_segments[-1] + " " + s
+        else:
+            final_segments.append(s)
+
+    return final_segments
+
 def analyze_self_promotion(text):
-    doc = nlp(text)
+    # Use smart_split to get resume-aware sentence/segment boundaries
+    segments = smart_split(text)
     results = []
-    for sent in doc.sents:
-        score = self_promotion_score(sent.text)
-        results.append((sent.text.strip(), score))
+    for seg in segments:
+        seg_text = seg.strip()
+        if not seg_text:
+            continue
+        knn_score = self_promotion_score(seg_text)
+        bilstm_score = bilstm_self_promotion_score(seg_text)   # >>> added ensemble
+        score = (knn_score + bilstm_score) / 2                  # >>> hybrid without changing UI
+        results.append((seg_text, score))
     avg_score = np.mean([s for _, s in results]) if results else 0
     return results, avg_score
 
@@ -114,12 +237,27 @@ def count_keywords(text):
     return round(hard / total * 100, 1), round(soft / total * 100, 1), round(rec / total * 100, 1)
 
 def highlight_keywords(text):
+    # Build safe regex for each keyword. Use \b for pure word tokens, and
+    # use lookaround boundaries for keywords that include non-word characters
+    # (e.g. C++, C#, node.js) so they match correctly.
+    def pattern_for(keyword: str) -> str:
+        esc = re.escape(keyword)
+        # if keyword only contains word characters, 
+        # we can safely use \b boundaries for nicer matches
+        if re.match(r"^[A-Za-z0-9_]+$", keyword):
+            return rf"\b({esc})\b"
+        # otherwise use lookarounds that assert non-word chars around the token
+        return rf"(?<!\w)({esc})(?!\w)"
+
     for w in sorted(SOFT_SKILLS, key=len, reverse=True):
-        text = re.sub(rf"\b({w})\b", r"<span style='background-color:#2196f3; color:white; padding:2px 4px; border-radius:3px;'>\1</span>", text, flags=re.IGNORECASE)
+        pat = pattern_for(w)
+        text = re.sub(pat, r"<span style='background-color:#2196f3; color:white; padding:2px 4px; border-radius:3px;'>\1</span>", text, flags=re.IGNORECASE)
     for w in sorted(HARD_SKILLS, key=len, reverse=True):
-        text = re.sub(rf"\b({w})\b", r"<span style='background-color:#4caf50; color:white; padding:2px 4px; border-radius:3px;'>\1</span>", text, flags=re.IGNORECASE)
+        pat = pattern_for(w)
+        text = re.sub(pat, r"<span style='background-color:#4caf50; color:white; padding:2px 4px; border-radius:3px;'>\1</span>", text, flags=re.IGNORECASE)
     for w in sorted(RECRUITER_KEYWORDS, key=len, reverse=True):
-        text = re.sub(rf"\b({w})\b", r"<span style='background-color:#ff9800; color:white; padding:2px 4px; border-radius:3px;'>\1</span>", text, flags=re.IGNORECASE)
+        pat = pattern_for(w)
+        text = re.sub(pat, r"<span style='background-color:#ff9800; color:white; padding:2px 4px; border-radius:3px;'>\1</span>", text, flags=re.IGNORECASE)
     return text
 
 # --- Streamlit UI ---
