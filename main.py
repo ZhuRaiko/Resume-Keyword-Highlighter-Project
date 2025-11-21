@@ -12,6 +12,15 @@ import joblib
 import torch
 import torch.nn as nn   # >>> ADDED for BiLSTM
 
+# -------------------------
+# Module-level imports
+# - `streamlit` for UI
+# - `SentenceTransformer` for sentence embeddings used by the KNN model
+# - `TextBlob` for a simple sentiment heuristic
+# - `spacy` for NLP pipeline (only used for initial sentence parsing in earlier versions)
+# - `torch` / `nn` for the optional BiLSTM ensemble model
+# -------------------------
+
 # --- Load models once ---
 @st.cache_resource
 def load_models():
@@ -20,6 +29,14 @@ def load_models():
     return nlp, bert_model
 
 nlp, bert_model = load_models()
+
+# -------------------------
+# Keyword lists
+# These lists are loaded from `keywords.json` and used by the UI to
+# highlight hard skills, soft skills and recruiter-centric terms.
+# They are intentionally kept simple string lists for fast substring
+# matching in `count_keywords` and `highlight_keywords`.
+# -------------------------
 
 # --- Keyword lists ---
 with open("keywords.json", "r") as f:
@@ -57,6 +74,14 @@ def load_or_train_knn():
 
 knn_model = load_or_train_knn()
 
+# -------------------------
+# BiLSTM ensemble (optional)
+# If a trained PyTorch checkpoint `bilstm_selfpromo.pt` is present,
+# we load it and expose `bilstm_self_promotion_score()` which returns
+# a probability in [0,1] for the input sentence. This is averaged
+# with the KNN prediction to form the final self-promotion score.
+# -------------------------
+
 # >>> ADDED for BiLSTM
 class BiLSTM(nn.Module):
     def __init__(self, hidden=128):
@@ -91,6 +116,14 @@ def bilstm_self_promotion_score(sentence):
         prob = bilstm_model(tokens["input_ids"]).item()
     return float(prob)
 # <<< END OF ADDED
+
+# -------------------------
+# Helper functions
+# - `has_metric` detects numeric measurements (percent, counts, money)
+# - `sentiment_score` is a small convenience wrapper around TextBlob
+# - `self_promotion_score` encodes the sentence via the SentenceTransformer
+#   and queries the KNN classifier (probability if available)
+# -------------------------
 
 # --- Helper functions ---
 def has_metric(sentence):
@@ -187,6 +220,15 @@ def smart_split(text):
 
     return final_segments
 
+# -------------------------
+# Analysis pipeline
+# `analyze_self_promotion` now uses `smart_split` to produce resume-aware
+# segments (bullets, headers, short lines). Each segment is scored by
+# the KNN model and the BiLSTM (if available) and the two scores are
+# averaged into a single self-promotion score returned alongside the
+# computed average for the whole document.
+# -------------------------
+
 def analyze_self_promotion(text):
     # Use smart_split to get resume-aware sentence/segment boundaries
     segments = smart_split(text)
@@ -235,6 +277,15 @@ def highlight_keywords(text):
         pat = pattern_for(w)
         text = re.sub(pat, r"<span style='background-color:#ff9800; color:white; padding:2px 4px; border-radius:3px;'>\1</span>", text, flags=re.IGNORECASE)
     return text
+
+# -------------------------
+# Streamlit UI
+# The remainder of the file wires everything into a Streamlit app:
+# 1. Accept an uploaded file or pasted text
+# 2. Extract text from common file types (PDF, DOCX, TXT)
+# 3. Compute keyword composition and self-promotion scores
+# 4. Render highlighted input and per-segment score boxes
+# -------------------------
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="SkillHighlight Analyzer", layout="wide")
