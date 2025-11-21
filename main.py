@@ -2,6 +2,7 @@ import streamlit as st
 from sentence_transformers import SentenceTransformer
 from textblob import TextBlob
 from sklearn.neighbors import KNeighborsClassifier
+import json
 import spacy
 import numpy as np
 import pandas as pd
@@ -21,39 +22,14 @@ def load_models():
 nlp, bert_model = load_models()
 
 # --- Keyword lists ---
-ACTION_VERBS = [
-    "achieved", "implemented", "developed", "led", "optimized", "created", "initiated",
-    "designed", "coordinated", "delivered", "resolved", "mentored", "awarded",
-    "recognized", "improved", "boosted", "generated", "increased", "spearheaded",
-    "supervised", "analyzed", "engineered", "executed", "enhanced", "facilitated",
-    "launched", "managed", "negotiated", "organized", "oversaw", "produced",
-    "streamlined", "trained", "upgraded", "supported", "evaluated", "consulted"
-]
+with open("keywords.json", "r") as f:
+    keyword_data = json.load(f)
 
-SOFT_SKILLS = [
-    "communication", "teamwork", "adaptability", "leadership", "creativity",
-    "collaboration", "problem-solving", "critical thinking", "time management",
-    "empathy", "conflict resolution", "decision making", "emotional intelligence",
-    "organization", "negotiation", "flexibility", "work ethic", "initiative",
-    "attention to detail", "accountability", "presentation", "multitasking"
-]
+ACTION_VERBS = keyword_data["ACTION_VERBS"]
+SOFT_SKILLS = keyword_data["SOFT_SKILLS"]
+HARD_SKILLS = keyword_data["HARD_SKILLS"]
+RECRUITER_KEYWORDS = keyword_data["RECRUITER_KEYWORDS"]
 
-HARD_SKILLS = [
-    "python", "c++", "java", "javascript", "typescript", "react", "node.js", "html", "css", "sql", "docker",
-    "kubernetes", "aws", "azure", "gcp", "git", "linux",
-    "machine learning", "deep learning", "data analysis", "data visualization",
-    "pandas", "numpy", "tensorflow", "pytorch", "statistics", "data engineering",
-    "project management", "agile", "scrum", "budgeting", "forecasting",
-    "risk management", "business analysis", "customer relationship management",
-    "photoshop", "illustrator", "seo", "content marketing", "user experience", "figma", "canva"
-]
-
-RECRUITER_KEYWORDS = [
-    "certified", "results-driven", "innovation", "initiative", "performance",
-    "strategic", "deliverables", "optimization", "goal-oriented", "motivated",
-    "analytical", "proactive", "efficient", "collaborative", "leadership",
-    "cross-functional", "stakeholder", "scalable", "impact", "ROI"
-]
 
 # --- Load or train KNN model ---
 @st.cache_resource

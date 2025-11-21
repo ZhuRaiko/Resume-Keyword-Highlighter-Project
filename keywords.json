@@ -1,0 +1,32 @@
+{
+  "ACTION_VERBS": [
+    "achieved", "implemented", "developed", "led", "optimized", "created", "initiated",
+    "designed", "coordinated", "delivered", "resolved", "mentored", "awarded",
+    "recognized", "improved", "boosted", "generated", "increased", "spearheaded",
+    "supervised", "analyzed", "engineered", "executed", "enhanced", "facilitated",
+    "launched", "managed", "negotiated", "organized", "oversaw", "produced",
+    "streamlined", "trained", "upgraded", "supported", "evaluated", "consulted"
+  ],
+  "SOFT_SKILLS": [
+    "communication", "teamwork", "adaptability", "leadership", "creativity",
+    "collaboration", "problem-solving", "critical thinking", "time management",
+    "empathy", "conflict resolution", "decision making", "emotional intelligence",
+    "organization", "negotiation", "flexibility", "work ethic", "initiative",
+    "attention to detail", "accountability", "presentation", "multitasking"
+  ],
+  "HARD_SKILLS": [
+    "python", "c++", "java", "javascript", "typescript", "react", "node.js", "html", "css", "sql", "docker",
+    "kubernetes", "aws", "azure", "gcp", "git", "linux",
+    "machine learning", "deep learning", "data analysis", "data visualization",
+    "pandas", "numpy", "tensorflow", "pytorch", "statistics", "data engineering",
+    "project management", "agile", "scrum", "budgeting", "forecasting",
+    "risk management", "business analysis", "customer relationship management",
+    "photoshop", "illustrator", "seo", "content marketing", "user experience", "figma", "canva"
+  ],
+  "RECRUITER_KEYWORDS": [
+    "certified", "results-driven", "innovation", "initiative", "performance",
+    "strategic", "deliverables", "optimization", "goal-oriented", "motivated",
+    "analytical", "proactive", "efficient", "collaborative", "leadership",
+    "cross-functional", "stakeholder", "scalable", "impact", "ROI"
+  ]
+}
