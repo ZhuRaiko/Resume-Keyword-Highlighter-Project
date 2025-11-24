@@ -11,7 +11,25 @@ from tqdm import tqdm
 # ----------------------------------------------------
 df = pd.read_csv("self_promotion_dataset.csv")
 
-sentences = df["sentence"].astype(str).tolist()
+# Ensure 'sentence' and 'label' exist and are usable. Coerce labels to numeric
+# and drop rows where sentence or label is missing/non-finite to avoid
+# IntCastingNaNError when converting to int.
+if "sentence" not in df.columns:
+    raise ValueError("Expected 'sentence' column in self_promotion_dataset.csv")
+if "label" not in df.columns:
+    raise ValueError("Expected 'label' column in self_promotion_dataset.csv")
+
+df["sentence"] = df["sentence"].astype(str)
+# coerce non-numeric labels to NaN
+df["label"] = pd.to_numeric(df["label"], errors="coerce")
+before = len(df)
+df = df.dropna(subset=["sentence", "label"])  # remove rows with missing values
+after = len(df)
+if before - after > 0:
+    print(f"Dropped {before-after} rows with missing/invalid sentence or label")
+
+# Now safe to convert to int (labels should be 0/1 or similar)
+sentences = df["sentence"].tolist()
 labels = df["label"].astype(int).tolist()
 
 # ----------------------------------------------------
