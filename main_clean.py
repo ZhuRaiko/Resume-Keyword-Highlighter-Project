@@ -141,21 +141,24 @@ def count_keywords(text: str):
     h = count_list(HARD_SKILLS)
     s = count_list(SOFT_SKILLS)
     r = count_list(RECRUITER_KEYWORDS)
+    a = count_list(ACTION_VERBS)
 
-    total_matches = h + s + r
+    total_matches = h + s + r + a
     if total_matches > 0:
         # Show composition of matched keywords across categories (more intuitive for the UI bars)
         def comp(count):
             return int(round(100.0 * count / total_matches))
-        return comp(h), comp(s), comp(r)
+        return comp(h), comp(s), comp(r), comp(a)
     # fallback: percent of total words (original behavior)
     total = len(text.split()) or 1
     def pct(count):
         return int(min(100, round(100.0 * count / total)))
-    return pct(h), pct(s), pct(r)
+    return pct(h), pct(s), pct(r), pct(a)
 
 
-def highlight_keywords(text: str) -> str:
+def highlight_keywords(text: str, disabled_labels=None) -> str:
+    if disabled_labels is None:
+        disabled_labels = set()
     # find excluded spans (emails, urls)
     excluded = []
     for m in re.finditer(r"\b[\w\.-]+@[\w\.-]+\.[a-zA-Z]{2,}\b|https?://\S+|www\.\S+", text):
@@ -273,7 +276,11 @@ def highlight_keywords(text: str) -> str:
             matched_text = text[s_char:e_char]
 
             # find first/last alphanumeric positions and expand to include contiguous allowed symbols
-            allowed_symbols = set(['+', '#', '.', '-'])
+            # By default only allow programming symbols; allow '.' only when not in TOKEN_ALIGNED
+            # or when the original keyword explicitly contains a dot (e.g., 'node.js').
+            allowed_symbols = set(['+', '#', '-'])
+            if (not TOKEN_ALIGNED) or ('.' in (display_kw or '')):
+                allowed_symbols.add('.')
             first_alnum = None
             last_alnum = None
             for idx, ch in enumerate(matched_text):
@@ -334,7 +341,10 @@ def highlight_keywords(text: str) -> str:
             # update span to trimmed version for overlap checks
             if overlaps((new_s, new_e)):
                 continue
-            if any(k in occupied_tokens for k in range(i, j+1)):
+            # allow matches if at least one token in the window is free
+            # (previous behavior blocked the match if any token was occupied).
+            # This makes SOFT and RECRUITER keywords more permissive.
+            if all(k in occupied_tokens for k in range(i, j+1)):
                 continue
 
             # heuristics per category
@@ -448,7 +458,7 @@ elif text_input.strip():
     text = text_input.strip()
 
 if text:
-    hard_pct, soft_pct, rec_pct = count_keywords(text)
+    hard_pct, soft_pct, rec_pct, action_pct = count_keywords(text)
     results, avg_score = analyze_self_promotion(text)
 
     col1, col2 = st.columns([2, 1])
@@ -467,6 +477,9 @@ if text:
             <div style='margin-bottom:10px;'><b>Recruiter Keywords:</b> {rec_pct}%
             <div style='height:10px; background-color:#ccc; border-radius:6px;'>
                 <div style='width:{rec_pct}%; background-color:#ff9800; height:10px; border-radius:6px;'></div></div></div>
+            <div style='margin-bottom:10px;'><b>Action Verbs:</b> {action_pct}%
+            <div style='height:10px; background-color:#ccc; border-radius:6px;'>
+                <div style='width:{action_pct}%; background-color:#c62828; height:10px; border-radius:6px;'></div></div></div>
         """, unsafe_allow_html=True)
 
     st.subheader(f"Overall Self-Promotion Score: {avg_score:.2f}")
