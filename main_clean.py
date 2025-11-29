@@ -11,6 +11,7 @@ import io
 import tempfile
 import os
 import joblib
+import streamlit.components.v1 as components
 
 # Configuration toggles
 # Set TOKEN_ALIGNED to True to highlight whole spaCy tokens (safer for punctuation edges)
@@ -97,6 +98,23 @@ def self_promotion_score(sentence: str) -> float:
 
 def analyze_self_promotion(text: str):
     """Return list of (sentence, score) and average score for the document."""
+    
+    # Achievement and impact indicators
+    achievement_words = {'achieved', 'delivered', 'improved', 'increased', 'reduced', 'led', 'managed', 
+                        'developed', 'created', 'launched', 'implemented', 'drove', 'exceeded', 'optimized',
+                        'streamlined', 'established', 'built', 'designed', 'spearheaded', 'pioneered'}
+    impact_words = {'resulting', 'leading to', 'by', 'saved', 'generated', 'boosted', 'enhanced'}
+    
+    def detect_achievement_pattern(stxt_lower):
+        """Detect strong achievement patterns like 'Achieved X by doing Y'"""
+        has_achievement = any(w in stxt_lower for w in achievement_words)
+        has_impact = any(w in stxt_lower for w in impact_words)
+        return has_achievement and has_impact
+    
+    def is_bullet_point(stxt):
+        """Check if sentence starts with bullet/list marker"""
+        return bool(re.match(r'^\s*[-•●○▪▫◦⦿⦾]\s+|^\s*\d+[\.)]\s+', stxt))
+    
     sents = []
     try:
         doc = nlp(text)
@@ -104,21 +122,51 @@ def analyze_self_promotion(text: str):
             stxt = sent.text.strip()
             if not stxt:
                 continue
+            
+            stxt_lower = stxt.lower()
+            
+            # Base KNN score
             base = self_promotion_score(stxt)
-            bonus = 0.1 if has_metric(stxt) else 0.0
-            # simple sentiment boost for positive sentences
+            
+            # Metric bonus (stronger weight)
+            metric_bonus = 0.15 if has_metric(stxt) else 0.0
+            
+            # Achievement pattern bonus
+            achievement_bonus = 0.12 if detect_achievement_pattern(stxt_lower) else 0.0
+            
+            # Bullet point bonus (resume bullets are typically achievements)
+            bullet_bonus = 0.08 if is_bullet_point(stxt) else 0.0
+            
+            # Sentiment boost for positive sentences
             try:
                 pol = TextBlob(stxt).sentiment.polarity
             except Exception:
                 pol = 0.0
-            pol_boost = 0.05 if pol > 0.1 else 0.0
-            score = min(1.0, base + bonus + pol_boost)
+            pol_boost = 0.06 if pol > 0.15 else 0.0
+            
+            # Action verb bonus (starts with strong action verb)
+            action_verb_bonus = 0.0
+            if ACTION_VERBS:
+                first_word = stxt_lower.split()[0] if stxt_lower else ''
+                if any(first_word.startswith(v.lower()) for v in ACTION_VERBS[:50]):  # check first 50
+                    action_verb_bonus = 0.08
+            
+            # Length penalty (very short sentences unlikely to be achievements)
+            length_penalty = -0.1 if len(stxt.split()) < 5 else 0.0
+            
+            # Calculate final score with all bonuses
+            score = base + metric_bonus + achievement_bonus + bullet_bonus + pol_boost + action_verb_bonus + length_penalty
+            score = min(1.0, max(0.0, score))  # clamp to [0, 1]
+            
             sents.append((stxt, score))
     except Exception:
-        # fallback: split on periods
-        parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", text) if p.strip()]
+        # fallback: split on periods and bullets
+        parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+|(?<=^)\s*[-•●]\s+", text, flags=re.MULTILINE) if p.strip()]
         for p in parts:
-            sents.append((p, min(1.0, self_promotion_score(p))))
+            base_score = self_promotion_score(p)
+            metric_bonus = 0.15 if has_metric(p) else 0.0
+            sents.append((p, min(1.0, base_score + metric_bonus)))
+    
     avg = float(np.mean([s for _, s in sents])) if sents else 0.0
     return sents, avg
 
@@ -169,6 +217,70 @@ def highlight_keywords(text: str, disabled_labels=None) -> str:
             if not (a1 <= b0 or a0 >= b1):
                 return True
         return False
+
+    # Context validation: check if matched tokens are used as skills/attributes (not incidental)
+    def is_valid_context(window, label):
+        """Validate that the matched window is used in appropriate context for the given label."""
+        
+        # HARD skills: Check for date/time context patterns first (applies to all window sizes)
+        if label == 'HARD':
+            # Check if any token in the window is near a year
+            for tok in window:
+                nearby_tokens = []
+                for offset in range(-3, 4):  # Check 3 tokens before and after
+                    idx = tok.i + offset
+                    if 0 <= idx < len(tok.doc) and idx != tok.i:
+                        nearby_tokens.append(tok.doc[idx])
+                
+                # If there's a year (4-digit number) nearby, likely a date context
+                has_year_nearby = any(t.text.isdigit() and len(t.text) == 4 and 1900 <= int(t.text) <= 2100 
+                                     for t in nearby_tokens if t.text.isdigit())
+                if has_year_nearby:
+                    # Check if token is a common non-technical word that could be in dates
+                    non_tech_in_dates = {'spring', 'summer', 'fall', 'winter', 'may', 'march', 'august'}
+                    if tok.text.lower() in non_tech_in_dates:
+                        return False
+        
+        # Single-token checks for all labels
+        if len(window) == 1:
+            tok = window[0]
+            # Skip if token is modifying another noun (adjective before noun in compound)
+            if tok.pos_ == 'ADJ' and tok.head != tok and tok.head.pos_ == 'NOUN' and tok.i < tok.head.i:
+                # Check if this is part of a compound phrase like 'quality assurance' where 'quality' shouldn't highlight
+                return False
+            # Skip if token is a generic verb (not used as skill)
+            if tok.pos_ == 'VERB' and tok.dep_ not in ('ROOT', 'conj', 'xcomp', 'ccomp'):
+                return False
+            
+            # HARD skills: additional validation to prevent false positives
+            if label == 'HARD':
+                # Skip if it's part of a larger compound phrase (e.g., "python" in "python snake")
+                # Check if the token has children that extend beyond the window
+                for child in tok.children:
+                    if child not in window and child.dep_ in ('compound', 'amod', 'nmod'):
+                        # Check if this forms a non-technical phrase
+                        if child.i > tok.i:  # child comes after
+                            return False
+                
+                # Skip if the token is being used attributively (modifying a non-technical noun)
+                if tok.dep_ in ('amod', 'compound') and tok.head not in window:
+                    # It's modifying something outside the window - likely not a skill reference
+                    return False
+        
+        # Multi-token checks: ensure the phrase stands alone (not part of larger phrase)
+        first_tok = window[0]
+        last_tok = window[-1]
+        
+        # Skip if first token is modifying something outside the window
+        if first_tok.pos_ == 'ADJ' and first_tok.head not in window and first_tok.head.pos_ == 'NOUN':
+            return False
+        
+        # Skip if last token is being modified by something outside the window on the right
+        for child in last_tok.children:
+            if child.i > last_tok.i and child not in window and child.dep_ in ('amod', 'compound', 'nmod'):
+                return False
+        
+        return True
 
     # Build normalized maps for keywords using spaCy (lemmas) and joined no-punct forms
     all_keywords = []
@@ -243,12 +355,60 @@ def highlight_keywords(text: str, disabled_labels=None) -> str:
     occupied_tokens = set()
     replacements = []
 
+    # Detect skill enumeration patterns: "X and Y skills/abilities" or "X, Y, and Z skills"
+    # These should be highlighted as a whole phrase
+    def find_skill_enumerations():
+        enum_spans = []
+        for sent in sents:
+            sent_tokens = [t for t in sent if t.i < n]
+            for i, tok in enumerate(sent_tokens):
+                # Look for "skills", "abilities", "qualities" at end
+                if tok.lemma_.lower() in ('skill', 'ability', 'quality', 'strength', 'competency', 'expertise'):
+                    # Walk backwards to find start of enumeration
+                    start_idx = None
+                    for j in range(i-1, max(-1, i-10), -1):  # look back up to 10 tokens
+                        t = sent_tokens[j]
+                        # Check if this could be start of skill list
+                        if t.pos_ in ('NOUN', 'ADJ', 'PROPN') and (j == 0 or sent_tokens[j-1].pos_ not in ('NOUN', 'ADJ', 'PROPN', 'CCONJ', 'PUNCT')):
+                            # Verify there's a conjunction or comma in between
+                            has_conj = any(sent_tokens[k].pos_ in ('CCONJ',) or sent_tokens[k].text in (',', 'and', 'or') for k in range(j, i))
+                            if has_conj:
+                                start_idx = sent_tokens[j].i
+                                break
+                    if start_idx is not None:
+                        enum_spans.append((start_idx, tok.i + 1))  # (start_tok_idx, end_tok_idx exclusive)
+        return enum_spans
+    
+    skill_enum_spans = find_skill_enumerations()
+
     i = 0
     while i < n:
         if i in occupied_tokens:
             i += 1
             continue
         matched = False
+        
+        # First, check if this position starts a skill enumeration pattern
+        for enum_start, enum_end in skill_enum_spans:
+            if i == enum_start and not any(k in occupied_tokens for k in range(enum_start, enum_end)):
+                # Found skill enumeration starting here, highlight entire phrase
+                window = tokens[enum_start:enum_end]
+                s_char = window[0].idx
+                e_char = window[-1].idx + len(window[-1].text)
+                matched_text = text[s_char:e_char].strip()
+                # Label as SOFT (skill enumerations are typically soft skills)
+                color = '#1976d2'
+                html = f"<span style='background-color:{color}; color:white; padding:2px 4px; border-radius:3px;'>{matched_text}</span>"
+                replacements.append((s_char, e_char, html))
+                for k in range(enum_start, enum_end):
+                    occupied_tokens.add(k)
+                matched = True
+                break
+        
+        if matched:
+            i += 1
+            continue
+        
         # try longest-first windows
         for L in range(min(max_kw_len, n - i), 0, -1):
             j = i + L - 1
@@ -267,6 +427,35 @@ def highlight_keywords(text: str, disabled_labels=None) -> str:
                 continue
 
             label, display_kw = meta
+
+            # Context validation: ensure the match is used appropriately (prevents false positives)
+            # Check if SOFT/RECRUITER keywords are used in proper context (not as incidental modifiers)
+            if label in ('SOFT', 'RECRUITER'):
+                skip_match = False
+                # Single-token checks
+                if len(window) == 1:
+                    tok = window[0]
+                    # Skip if adjective modifying a noun outside the match (e.g., 'quality' in 'quality assurance')
+                    if tok.pos_ == 'ADJ' and tok.head != tok and tok.head.pos_ == 'NOUN' and tok.i < tok.head.i:
+                        skip_match = True
+                    # Skip if verb in dependent clause (not main skill verb)
+                    elif tok.pos_ == 'VERB' and tok.dep_ not in ('ROOT', 'conj', 'xcomp', 'ccomp'):
+                        skip_match = True
+                else:
+                    # Multi-token: check if phrase is part of larger compound
+                    first_tok = window[0]
+                    last_tok = window[-1]
+                    # Skip if first token is modifying something outside window
+                    if first_tok.pos_ == 'ADJ' and first_tok.head not in window and first_tok.head.pos_ == 'NOUN':
+                        skip_match = True
+                    # Skip if last token has important children outside window on right
+                    if not skip_match:
+                        for child in last_tok.children:
+                            if child.i > last_tok.i and child not in window and child.dep_ in ('amod', 'compound', 'nmod'):
+                                skip_match = True
+                                break
+                if skip_match:
+                    continue
 
             # compute span chars (original token span)
             s_char = window[0].idx
@@ -351,9 +540,13 @@ def highlight_keywords(text: str, disabled_labels=None) -> str:
             sent_idx = sent_index_by_token.get(i, None)
             # HARD: require noun/proper noun or direct object present in window
             if label == 'HARD':
-                ok = any(t.pos_ in ('NOUN', 'PROPN') for t in window) or any(t.dep_ == 'dobj' for t in window)
-                if not ok:
-                    continue
+                if not RELAX_HARD:
+                    ok = any(t.pos_ in ('NOUN', 'PROPN') for t in window) or any(t.dep_ == 'dobj' for t in window)
+                    if not ok:
+                        continue
+                    # Additional context validation
+                    if not is_valid_context(window, label):
+                        continue
                 color = '#4caf50'
             # SOFT: skip if negative sentiment in sentence (unless RELAX_SOFT)
             elif label == 'SOFT':
@@ -413,6 +606,34 @@ def highlight_keywords(text: str, disabled_labels=None) -> str:
 
 # Streamlit UI (use this file to validate before replacing main.py)
 st.set_page_config(page_title="SkillHighlight Analyzer", layout="wide")
+
+# Sidebar configuration controls
+with st.sidebar:
+    st.header("⚙️ Configuration")
+    
+    st.subheader("Matching Settings")
+    TOKEN_ALIGNED = st.checkbox("Token-aligned mode", value=TOKEN_ALIGNED, 
+                                 help="Highlight whole tokens only (safer for punctuation)")
+    
+    st.subheader("Heuristic Relaxation")
+    st.caption("Enable to make highlighting more permissive")
+    RELAX_HARD = st.checkbox("Relax HARD skills", value=RELAX_HARD,
+                              help="Allow hard skills without strict noun/object requirements")
+    RELAX_ACTION = st.checkbox("Relax ACTION verbs", value=RELAX_ACTION,
+                                help="Allow action verbs without direct object requirement")
+    RELAX_SOFT = st.checkbox("Relax SOFT skills", value=RELAX_SOFT,
+                              help="Skip negative sentiment suppression for soft skills")
+    RELAX_RECRUITER = st.checkbox("Relax RECRUITER keywords", value=RELAX_RECRUITER,
+                                   help="Allow recruiter keywords in verbless bullets")
+    
+    st.subheader("Sentiment Threshold")
+    SOFT_NEG_THRESHOLD = st.slider("Soft skill sentiment threshold", 
+                                     min_value=-1.0, max_value=0.0, value=SOFT_NEG_THRESHOLD, step=0.05,
+                                     help="Suppress soft skills below this sentiment score")
+    
+    st.divider()
+    st.caption("💡 Tip: Click the keyword composition bars to toggle highlighting for each category")
+
 st.title("SkillHighlight: Resume Self-Promotion Analyzer")
 st.write("Upload a resume or paste text to analyze your self-promotion and skills balance.")
 
@@ -458,13 +679,21 @@ elif text_input.strip():
     text = text_input.strip()
 
 if text:
+    # Initialize disabled classifiers in session state
+    if 'disabled_classifiers' not in st.session_state:
+        st.session_state.disabled_classifiers = set()
+    
+    DISABLED_BARS = st.session_state.disabled_classifiers
+    
     hard_pct, soft_pct, rec_pct, action_pct = count_keywords(text)
     results, avg_score = analyze_self_promotion(text)
 
     col1, col2 = st.columns([2, 1])
     with col1:
         st.subheader("Extracted / Input Text")
-        st.markdown(f"<div style='line-height:1.6; font-size:16px;'>{highlight_keywords(text)}</div>", unsafe_allow_html=True)
+        # Preserve line breaks by replacing newlines with <br> tags
+        highlighted_text = highlight_keywords(text, disabled_labels=DISABLED_BARS)
+        st.markdown(f"<div style='line-height:1.6; font-size:16px; white-space:pre-wrap;'>{highlighted_text}</div>", unsafe_allow_html=True)
     with col2:
         st.subheader("Keyword Composition")
         st.markdown(f"""
