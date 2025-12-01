@@ -30,11 +30,11 @@ Our self-promotion classifier achieves strong performance using a K-Nearest Neig
 
 ### Dataset Statistics
 
-- **Total Samples**: 3,013 labeled resume sentences
+- **Total Samples**: 6,752 labeled resume sentences
 - **Class Distribution**: 
-  - Self-Promotional: 1,758 samples (58.4%)
-  - Neutral: 1,254 samples (41.6%)
-- **Well-balanced dataset** ensures unbiased model training
+  - Self-Promotional: 2,233 samples (33.1%)
+  - Neutral/Descriptive: 4,519 samples (66.9%)
+- **Larger dataset** with diverse resume writing styles for robust training
 
 ### Model Configuration
 
@@ -125,7 +125,7 @@ Resume-Keyword-Highlighter-Project/
 ├── main_clean.py                    # Main application (production)
 ├── main.py                          # Original implementation
 ├── keywords.json                    # Keyword database (4 categories)
-├── self_promotion_dataset.csv       # Training data (3,013 samples)
+├── self_promotion_dataset.csv       # Training data (6,752 samples)
 ├── evaluate_model.py               # Model evaluation script
 ├── knn_model.pkl                   # Cached KNN model
 ├── model_metrics.json              # Evaluation results
