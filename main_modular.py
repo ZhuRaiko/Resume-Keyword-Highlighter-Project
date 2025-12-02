@@ -74,16 +74,19 @@ def main():
     uploaded = st.file_uploader("Upload your resume (PDF, DOCX, TXT):", type=["pdf", "docx", "txt"])
     text_input = st.text_area("Or paste resume text here:")
     
-    # Extract text
+    # Extract text and track file type
     text = ""
+    file_type = None
     if uploaded:
         try:
             text = extract_from_file(uploaded)
+            file_type = uploaded.name.lower().split('.')[-1] if '.' in uploaded.name else None
         except Exception as e:
             st.error(str(e))
             return
     elif text_input.strip():
         text = text_input.strip()
+        file_type = "text_input"
     
     if not text:
         st.info("Upload a file or paste resume text to begin analysis.")
@@ -102,9 +105,9 @@ def main():
         text, hard_skills, soft_skills, recruiter_keywords, action_verbs
     )
     
-    # Analyze sentences
+    # Analyze sentences with file type context
     try:
-        results, avg_score = analyze_sentences(nlp, knn_model, bert_model, text, action_verbs)
+        results, avg_score = analyze_sentences(nlp, knn_model, bert_model, text, action_verbs, file_type)
     except Exception as e:
         st.error(f"Analysis failed: {e}")
         return

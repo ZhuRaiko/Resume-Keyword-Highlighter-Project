@@ -91,7 +91,7 @@ def smart_sentence_split(nlp, text: str) -> list:
     return sentences
 
 
-def analyze_sentences(nlp, knn_model, _bert_model, text: str, action_verbs: list, uploaded_file=None):
+def analyze_sentences(nlp, knn_model, _bert_model, text: str, action_verbs: list, file_type=None):
     """Analyze all sentences in text and return scored results"""
     achievement_words = {'achieved', 'delivered', 'improved', 'increased', 'reduced', 'led', 'managed', 
                         'developed', 'created', 'launched', 'implemented', 'drove', 'exceeded', 'optimized',
@@ -110,29 +110,109 @@ def analyze_sentences(nlp, knn_model, _bert_model, text: str, action_verbs: list
     
     sents = []
     try:
-        # Split by double newlines (blocks from PyMuPDF) or paragraphs
-        blocks = text.split('\n\n')
-        
         sentences = []
-        for block in blocks:
-            block = block.strip()
-            if len(block) < 10:
-                continue
+        
+        # Protected terms that should not be split
+        protected_terms = {
+            '.net', 'node.js', 'next.js', 'express.js', 'socket.io', 'd3.js', 'vue.js',
+            'b.s.', 'm.s.', 'ph.d.', 'b.a.', 'm.a.', 'm.b.a.', 
+            'inc.', 'corp.', 'ltd.', 'co.', 'dr.', 'mr.', 'mrs.', 'ms.',
+            'u.s.', 'u.k.', 'e.g.', 'i.e.', 'etc.', 'vs.', 'c#', 'pl/sql'
+        }
+        
+        # Helper to detect headers (should be filtered out, not scored)
+        def is_header(line):
+            words = line.split()
+            # Must be short and not have sentence ending
+            is_short = len(words) <= 4
+            no_end_punct = not re.search(r'[.!?]$', line)
+            not_bullet = not re.match(r'^[-•●○▪▫◦⦿⦾]', line)
+            # Headers often end with colon or are ALL CAPS
+            ends_colon = line.endswith(':')
+            is_caps = len(words) >= 2 and line.isupper()
             
-            # Each block is a complete bullet point or paragraph
-            # Only split if there are clearly multiple distinct sentences
-            sentence_count = len(re.findall(r'\.\s+[A-Z]', block))
+            return (is_short and no_end_punct and not_bullet) or ends_colon or is_caps
+        
+        # Helper to split multi-sentence content while protecting terms
+        def smart_split_sentences(content):
+            """Split content into sentences, protecting technical terms"""
+            # Don't split if it's a bullet point with only one sentence
+            # Check if content has clear sentence boundaries (. ! ? followed by space and capital letter)
+            has_multiple = len(re.findall(r'[.!?]\s+[A-Z]', content)) >= 1
             
-            if sentence_count >= 2:
-                # Multiple sentences - use spaCy
-                doc = nlp(block)
-                for sent in doc.sents:
-                    s = sent.text.strip()
-                    if len(s) >= 10:
-                        sentences.append(s)
-            else:
-                # Single unit - keep whole
-                sentences.append(block)
+            if not has_multiple:
+                # Single sentence or fragment, return as-is
+                if len(content) >= 10:
+                    return [content]
+                return []
+            
+            # Temporarily replace protected terms
+            temp_content = content
+            replacements = {}
+            for i, term in enumerate(protected_terms):
+                if term.lower() in temp_content.lower():
+                    placeholder = f"__PROTECTED_{i}__"
+                    # Case-insensitive replacement
+                    pattern = re.compile(re.escape(term), re.IGNORECASE)
+                    temp_content = pattern.sub(placeholder, temp_content)
+                    replacements[placeholder] = term
+            
+            # Use regex-based splitting for more reliable sentence boundaries
+            # Split on . ! ? followed by whitespace and capital letter
+            # This is more reliable than spaCy for resume text
+            parts = re.split(r'(?<=[.!?])\s+(?=[A-Z])', temp_content)
+            
+            results = []
+            for part in parts:
+                s = part.strip()
+                # Restore protected terms
+                for placeholder, original in replacements.items():
+                    s = s.replace(placeholder, original)
+                # Only keep if it's substantial enough
+                if len(s) >= 10 and len(s.split()) >= 2:
+                    results.append(s)
+            
+            return results
+        
+        if file_type in ['pdf', 'docx']:
+            # PDF and DOCX: Both split by single newlines after normalization
+            # Bullets are already normalized to • so treat both the same way
+            lines = text.split('\n')
+            
+            for line in lines:
+                line = line.strip()
+                if not line or len(line) < 10:
+                    continue
+                
+                # Skip headers entirely - don't score them
+                if is_header(line):
+                    continue
+                
+                # Keep each line as-is (already separated by extraction/paragraphs)
+                # Only split if there are genuinely multiple complete sentences
+                sentence_count = len(re.findall(r'[.!?]\s+[A-Z]', line))
+                
+                if sentence_count >= 1:
+                    # Has multiple sentences - split them
+                    split_sents = smart_split_sentences(line)
+                    if split_sents:
+                        sentences.extend(split_sents)
+                    else:
+                        # Fallback: keep original if split failed
+                        sentences.append(line)
+                else:
+                    # Single sentence or bullet - keep as-is
+                    sentences.append(line)
+        
+        elif file_type == 'txt' or file_type == 'text_input':
+            # TXT/text input: Use spaCy sentence detection with protection
+            split_sents = smart_split_sentences(text)
+            sentences.extend(split_sents)
+        
+        else:
+            # Unknown type: fallback to spaCy with protection
+            split_sents = smart_split_sentences(text)
+            sentences.extend(split_sents)
         
         for stxt in sentences:
             if not stxt:

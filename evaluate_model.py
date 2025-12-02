@@ -20,7 +20,7 @@ def evaluate_knn_model():
     """Evaluate KNN model with train/test split and cross-validation."""
     
     print("Loading dataset...")
-    df = pd.read_csv("self_promotion_dataset.csv")
+    df = pd.read_csv("data/self_promotion_dataset.csv")
     
     if df.empty or "sentence" not in df.columns or "label" not in df.columns:
         print("Error: Invalid dataset format. Need 'sentence' and 'label' columns.")
