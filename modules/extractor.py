@@ -3,6 +3,10 @@ import io
 import tempfile
 import os
 import re
+from docx.oxml.text.paragraph import CT_P
+from docx.oxml.table import CT_Tbl
+from docx.table import Table
+from docx.text.paragraph import Paragraph
 
 
 def normalize_resume_text(raw: str) -> str:
@@ -14,11 +18,26 @@ def normalize_resume_text(raw: str) -> str:
     - Merges percentages/grades with their course/item names
     - Merges company/position/location blocks into single lines
     - Preserves overall structure with proper section boundaries
+    - Aggressive whitespace normalization for PDF consistency
     """
     if not raw:
         return ""
+    
+    # Remove font change markers from PDF extraction
+    text = raw.replace("[FONT_CHANGE]", "")
+    
     # Normalize line endings
-    text = raw.replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    
+    # Aggressive whitespace normalization for PDF artifacts
+    # Remove multiple spaces within lines
+    text = re.sub(r'[ \t]{2,}', ' ', text)
+    
+    # Remove spaces before punctuation (common PDF artifact)
+    text = re.sub(r'\s+([.,;:!?])', r'\1', text)
+    
+    # Fix hyphenated words split across lines (common in PDFs)
+    text = re.sub(r'(\w+)-\s*\n\s*(\w+)', r'\1\2', text)
     
     # FIRST: Normalize all bullet types to a single consistent format
     # Replace all bullet variants with standard bullet •
@@ -44,6 +63,7 @@ def normalize_resume_text(raw: str) -> str:
         # Check if this should be merged with previous line
         # Merge if: previous line exists, previous doesn't end with sentence punctuation,
         # current line doesn't start with bullet, and previous line isn't a header (ends with :)
+        # Docling handles structure well, so we don't need font change markers
         if (merged_continuation_lines and 
             merged_continuation_lines[-1].strip() and
             not re.search(r'[.!?:]$', merged_continuation_lines[-1].strip()) and
@@ -262,65 +282,179 @@ def extract_from_file(uploaded_file) -> str:
                 return data.decode('latin-1', errors='ignore')
         
         elif name.endswith('.pdf'):
+            # Convert PDF to DOCX first for consistent extraction
             try:
-                # Try PyMuPDF with dict mode - add spacing for readability
-                import fitz
-                import re
-                doc = fitz.open(stream=data, filetype="pdf")
-                lines = []
-                prev_font_size = None
+                from pdf2docx import Converter
+                from docx import Document
                 
-                for page in doc:
-                    text_dict = page.get_text("dict")
-                    for block in text_dict.get("blocks", []):
-                        if block.get("type") == 0:  # text block
-                            for line in block.get("lines", []):
-                                line_text = ""
-                                font_size = None
-                                
-                                for span in line.get("spans", []):
-                                    line_text += span.get("text", "")
-                                    if font_size is None:
-                                        font_size = span.get("size", 0)
-                                
-                                line_text = line_text.strip()
-                                if line_text:
-                                    # Add blank line for visual spacing in certain cases
-                                    if lines:
-                                        is_bullet = re.match(r'^[-•●○▪▫◦⦿⦾]\s', line_text)
-                                        # Add spacing before bullets or when font size changes significantly
-                                        if is_bullet or (prev_font_size and font_size and abs(font_size - prev_font_size) > 1.5):
-                                            lines.append("")
-                                    
-                                    lines.append(line_text)
-                                    prev_font_size = font_size
+                # Create temporary files for PDF and DOCX
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_pdf:
+                    tmp_pdf.write(data)
+                    pdf_path = tmp_pdf.name
                 
-                doc.close()
-                return '\n'.join(lines)
-            except Exception:
-                # Fallback to pdfminer
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as tmp_docx:
+                    docx_path = tmp_docx.name
+                
                 try:
-                    from pdfminer.high_level import extract_text as extract_pdf_text
-                    return extract_pdf_text(io.BytesIO(data))
-                except Exception as e:
-                    raise Exception(f"PDF extraction failed: {e}")
+                    # Convert PDF to DOCX
+                    cv = Converter(pdf_path)
+                    cv.convert(docx_path, start=0, end=None)
+                    cv.close()
+                    
+                    # Now extract from the DOCX (same as DOCX extraction below)
+                    doc = Document(docx_path)
+                    text_parts = []
+                    
+                    for element in doc.element.body:
+                        if isinstance(element, CT_P):
+                            para = Paragraph(element, doc)
+                            para_text = para.text
+                            if para_text.strip():
+                                text_parts.append(para_text)
+                        elif isinstance(element, CT_Tbl):
+                            table = Table(element, doc)
+                            for row in table.rows:
+                                for cell in row.cells:
+                                    cell_text = cell.text.strip()
+                                    if cell_text:
+                                        text_parts.append(cell_text)
+                    
+                    result = '\n\n'.join(text_parts)
+                    return result
+                finally:
+                    # Clean up temp files
+                    try:
+                        os.remove(pdf_path)
+                        os.remove(docx_path)
+                    except Exception:
+                        pass
+                        
+            except Exception:
+                # Fallback to original PDF extraction if conversion fails
+                pass
+        
+        # Original PDF extraction fallback
+        if name.endswith('.pdf'):
+            try:
+                # Try Docling first - AI-powered structure preservation
+                from docling.document_converter import DocumentConverter
+                import re
+                
+                # Create temporary file for Docling
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
+                    tmp.write(data)
+                    tmp_path = tmp.name
+                
+                try:
+                    converter = DocumentConverter()
+                    result = converter.convert(tmp_path)
+                    
+                    # Export as markdown which preserves structure naturally
+                    md_text = result.document.export_to_markdown()
+                    
+                    # Clean up markdown formatting but preserve structure and spacing
+                    # Remove markdown headers (# ## ###) but keep the text
+                    md_text = re.sub(r'^#+\s+', '', md_text, flags=re.MULTILINE)
+                    # Remove markdown bold (**text**)
+                    md_text = re.sub(r'\*\*([^*]+)\*\*', r'\1', md_text)
+                    # Remove markdown italic (*text*)
+                    md_text = re.sub(r'\*([^*]+)\*', r'\1', md_text)
+                    # Remove markdown links [text](url)
+                    md_text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', md_text)
+                    # Clean up excessive blank lines (more than 2 consecutive)
+                    md_text = re.sub(r'\n{3,}', '\n\n', md_text)
+                    
+                    return md_text.strip()
+                finally:
+                    try:
+                        os.remove(tmp_path)
+                    except Exception:
+                        pass
+                        
+            except Exception:
+                # Fallback to PyMuPDF with dict mode
+                try:
+                    import fitz
+                    import re
+                    doc = fitz.open(stream=data, filetype="pdf")
+                    lines = []
+                    prev_font_size = None
+                    
+                    for page in doc:
+                        text_dict = page.get_text("dict")
+                        for block in text_dict.get("blocks", []):
+                            if block.get("type") == 0:  # text block
+                                for line in block.get("lines", []):
+                                    line_text = ""
+                                    font_size = None
+                                    
+                                    for span in line.get("spans", []):
+                                        line_text += span.get("text", "")
+                                        if font_size is None:
+                                            font_size = span.get("size", 0)
+                                    
+                                    line_text = line_text.strip()
+                                    if line_text:
+                                        # Add blank line for visual spacing in certain cases
+                                        if lines:
+                                            is_bullet = re.match(r'^[-•●○▪▫◦⦿⦾]\s', line_text)
+                                            # Add spacing before bullets or when font size changes significantly
+                                            if is_bullet or (prev_font_size and font_size and abs(font_size - prev_font_size) > 1.5):
+                                                lines.append("")
+                                                # Add special marker to prevent continuation merging across font changes
+                                                if prev_font_size and font_size and abs(font_size - prev_font_size) > 1.5:
+                                                    line_text = "[FONT_CHANGE]" + line_text
+                                        
+                                        lines.append(line_text)
+                                        prev_font_size = font_size
+                    
+                    doc.close()
+                    return '\n'.join(lines)
+                except Exception:
+                    # Final fallback to pdfminer
+                    try:
+                        from pdfminer.high_level import extract_text as extract_pdf_text
+                        return extract_pdf_text(io.BytesIO(data))
+                    except Exception as e:
+                        raise Exception(f"PDF extraction failed: {e}")
         
         elif name.endswith('.docx'):
             try:
-                # Use python-docx for better paragraph structure
+                # Use python-docx but mimic docx2txt's extraction behavior
                 from docx import Document
+                from docx.oxml.text.paragraph import CT_P
+                from docx.oxml.table import CT_Tbl
+                from docx.table import Table
+                from docx.text.paragraph import Paragraph
+                
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as tmp:
                     tmp.write(data)
                     tmp_path = tmp.name
                 try:
                     doc = Document(tmp_path)
-                    lines = []
-                    for para in doc.paragraphs:
-                        text = para.text.strip()
-                        if text:
-                            lines.append(text)
-                    # Use single newline so normalization can merge related content
-                    return '\n'.join(lines)
+                    text_parts = []
+                    
+                    # Extract text from all elements in document order (paragraphs and tables)
+                    # This matches docx2txt behavior of capturing everything
+                    for element in doc.element.body:
+                        if isinstance(element, CT_P):
+                            # Paragraph
+                            para = Paragraph(element, doc)
+                            para_text = para.text
+                            if para_text.strip():
+                                text_parts.append(para_text)
+                        elif isinstance(element, CT_Tbl):
+                            # Table - extract all cells
+                            table = Table(element, doc)
+                            for row in table.rows:
+                                for cell in row.cells:
+                                    cell_text = cell.text.strip()
+                                    if cell_text:
+                                        text_parts.append(cell_text)
+                    
+                    # Join with double newlines like docx2txt does
+                    result = '\n\n'.join(text_parts)
+                    return result
                 finally:
                     try:
                         os.remove(tmp_path)

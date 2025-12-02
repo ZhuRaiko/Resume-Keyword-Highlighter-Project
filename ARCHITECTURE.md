@@ -5,27 +5,65 @@
 ```
 /SkillHighlight
 │
-├── main_modular.py          # Streamlit UI (NEW - clean entry point)
-├── main_clean.py            # Original monolithic version (legacy)
-├── keywords.json            # Keyword database
-├── self_promotion_dataset.csv  # Training data (6,752 samples)
-├── knn_model.pkl            # Cached KNN model
+├── main_modular.py              # Streamlit UI (main entry point)
+├── evaluate_model.py            # Model evaluation script
 │
-├── models/                  # CORE THESIS COMPONENTS
+├── data/                        # DATA FILES
+│   ├── keywords.json            # Keyword database (4 categories)
+│   └── self_promotion_dataset.csv  # Training data (6,752 samples)
+│
+├── fonts/                       # CUSTOM FONTS
+│   ├── Morganite-*.ttf          # Morganite font family (titles/headers)
+│   └── deliware-*.otf           # Deliware font family (labels)
+│
+├── models/                      # CORE THESIS COMPONENTS
 │   ├── __init__.py
-│   ├── embedder.py          # BERT contextual embeddings
-│   ├── knn_classifier.py    # KNN classification (k=5)
-│   └── sentiment.py         # Sentiment analysis support
+│   ├── embedder.py              # BERT contextual embeddings
+│   ├── knn_classifier.py        # KNN classification (k=5)
+│   ├── knn_model.pkl            # Cached KNN model
+│   └── sentiment.py             # Sentiment analysis support
 │
-├── processing/              # SECONDARY PROCESSING
+├── modules/                     # PROCESSING MODULES
 │   ├── __init__.py
-│   ├── highlight_keywords.py   # SpaCy-driven keyword highlighting
-│   ├── sentence_scoring.py     # Self-promotion scoring with heuristics
-│   └── metrics.py              # Keyword composition metrics
+│   ├── counters.py              # Keyword composition metrics
+│   ├── embeddings.py            # Embedding utilities
+│   ├── extractor.py             # Text extraction (PDF→DOCX conversion)
+│   ├── highlight.py             # SpaCy-driven keyword highlighting
+│   └── scoring.py               # Self-promotion scoring with heuristics
 │
-└── utilities/               # UTILITY FUNCTIONS
-    └── __init__.py          # Text extraction (PDF/DOCX/TXT)
+└── backups/                     # LEGACY FILES
+    ├── main_clean.py            # Original monolithic version
+    └── main.py                  # Earlier implementation
 ```
+
+## 🎨 UI/UX Design
+
+### Theme & Typography
+
+The application uses a **brutalist design aesthetic** with:
+
+- **Dark Theme**: Background color `#0e1117`, sidebar `#262730`
+- **Morganite Font Family**: Used for headers (Black 900, ExtraBold 800, Bold 700)
+- **Deliware Font Family**: Used for toggle labels and UI elements
+- **Color-Coded Categories**:
+  - Hard Skills: Teal (#26a69a)
+  - Soft Skills: Purple (#7e57c2)
+  - Recruiter Keywords: Orange (#ff9f43)
+  - Action Verbs: Red (#ef5350)
+
+### Interactive Features
+
+- **Toggle Switches**: Enable/disable keyword highlighting per category with immediate visual feedback
+- **Dynamic Score Gradients**: Self-promotion score block changes color based on score:
+  - Green gradient (>0.8): Excellent
+  - Yellow/Orange gradient (0.5-0.8): Good
+  - Red gradient (<0.5): Needs improvement
+- **Progress Bars**: Compact 12px bars showing keyword composition percentages
+
+### Third-Party UI Components
+
+- **streamlit-toggle-switch**: Custom colored toggle switches for category control
+- **pdf2docx**: PDF to DOCX conversion for consistent text extraction
 
 ## 🎓 Academic Framing
 
@@ -48,20 +86,21 @@ These are the **two primary academic contributions**:
 
 These are **NOT core thesis components** — they are implementation details for handling resume format variations:
 
-- **SpaCy Highlighting** (`processing/highlight_keywords.py`)
+- **SpaCy Highlighting** (`modules/highlight.py`)
   - Context validation to prevent false positives
   - Linguistic pattern detection
   - Framing: "Secondary validation layer using dependency parsing"
 
-- **Heuristic Bonuses** (`processing/sentence_scoring.py`)
+- **Heuristic Bonuses** (`modules/scoring.py`)
   - Achievement pattern detection
   - Metric detection
   - Bullet point recognition
   - Sentiment adjustments
   - Framing: "Stabilization heuristics to normalize scores across writing styles"
 
-- **Text Extraction** (`utilities/`)
-  - PDF/DOCX parsing
+- **Text Extraction** (`modules/extractor.py`)
+  - PDF→DOCX conversion for consistent extraction
+  - Aggressive text normalization
   - Framing: "Preprocessing utilities for document format handling"
 
 ## 📝 How to Describe in Your Thesis
@@ -80,11 +119,13 @@ These are **NOT core thesis components** — they are implementation details for
 ```
 ┌─────────────────┐
 │  Resume Input   │
+│ (PDF/DOCX/TXT)  │
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│ Text Extraction │ (utility)
+│ Text Extraction │ (modules/extractor.py)
+│ PDF→DOCX Conv.  │
 └────────┬────────┘
          │
     ┌────┴────┐
@@ -115,19 +156,9 @@ These are **NOT core thesis components** — they are implementation details for
 
 ## 🔧 Running the Application
 
-### Using the Modular Version (Recommended)
-
 ```bash
 streamlit run main_modular.py
 ```
-
-### Using the Legacy Version
-
-```bash
-streamlit run main_clean.py
-```
-
-Both versions produce identical results — the modular version is simply better organized for academic defense.
 
 ## 🧪 Testing & Validation
 
@@ -150,12 +181,8 @@ assert knn is not None  # Model loaded successfully
 
 ```python
 # Test full pipeline
-from main_modular import load_all_models
-nlp, bert_model, knn_model, keyword_data = load_all_models()
-from processing.sentence_scoring import analyze_self_promotion
-
-text = "I led a team of 5 engineers and increased efficiency by 40%."
-results, avg = analyze_self_promotion(text, nlp, knn_model, bert_model, [])
+from modules.scoring import analyze_sentences
+results, avg = analyze_sentences(nlp, knn_model, bert_model, text, action_verbs, file_type)
 assert avg > 0.5  # Should detect self-promotion
 ```
 
@@ -195,15 +222,6 @@ This generates `model_metrics.json` with:
 - ✅ Clear documentation of purpose
 - ✅ Easy onboarding for new developers
 
-## 🚀 Migration Guide
-
-If you need to update the legacy `main_clean.py`:
-
-1. Test `main_modular.py` thoroughly
-2. Back up `main_clean.py` → `main_clean_backup.py`
-3. Replace `main_clean.py` with modular version
-4. Update all documentation references
-
 ## 📚 Citation in Thesis
 
 When citing the implementation:
@@ -211,7 +229,7 @@ When citing the implementation:
 > "The system was implemented in Python using three core libraries: 
 > SentenceTransformers for BERT embeddings, scikit-learn for KNN classification, 
 > and spaCy for linguistic analysis. The codebase was modularized into separate 
-> components (models/, processing/, utilities/) to ensure maintainability and 
+> components (models/, modules/) to ensure maintainability and 
 > facilitate individual component evaluation."
 
 ## ⚠️ Important Notes
@@ -237,5 +255,5 @@ Frame everything beyond BERT+KNN as "implementation details for production readi
 
 - `models/embedder.py` - BERT implementation details
 - `models/knn_classifier.py` - Classification methodology
-- `processing/sentence_scoring.py` - Scoring algorithm documentation
+- `modules/scoring.py` - Scoring algorithm documentation
 - `main_modular.py` - Complete system integration

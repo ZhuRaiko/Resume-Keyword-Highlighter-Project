@@ -1,6 +1,16 @@
 """
 Model Evaluation Script
 Evaluates the KNN self-promotion classifier and generates performance metrics.
+
+This script tests the core academic components:
+- Component #1: BERT embeddings (all-MiniLM-L6-v2)
+- Component #2: KNN classifier (k=5)
+
+Provides comprehensive evaluation including:
+- Train/test split validation (80/20)
+- 5-fold cross-validation
+- Confusion matrix analysis
+- Misclassification examples for error analysis
 """
 
 import pandas as pd
@@ -15,16 +25,41 @@ from sklearn.metrics import (
     precision_recall_fscore_support
 )
 import json
+import os
 
-def evaluate_knn_model():
-    """Evaluate KNN model with train/test split and cross-validation."""
+def evaluate_knn_model(show_examples=True, n_examples=5):
+    """
+    Evaluate KNN model with comprehensive metrics and error analysis.
+    
+    Args:
+        show_examples (bool): Whether to display misclassification examples
+        n_examples (int): Number of examples to show per error type
+    
+    Returns:
+        dict: Complete evaluation metrics
+    """
     
     print("Loading dataset...")
-    df = pd.read_csv("data/self_promotion_dataset.csv")
+    dataset_path = "data/self_promotion_dataset.csv"
+    if not os.path.exists(dataset_path):
+        print(f"❌ Error: Dataset not found at {dataset_path}")
+        return None
+    
+    # Read CSV with error handling for malformed lines
+    # Use quoting to handle commas within sentences
+    df = pd.read_csv(dataset_path, quoting=1, escapechar='\\', on_bad_lines='skip')
     
     if df.empty or "sentence" not in df.columns or "label" not in df.columns:
         print("Error: Invalid dataset format. Need 'sentence' and 'label' columns.")
         return
+    
+    # Clean data: remove rows with missing values
+    initial_size = len(df)
+    df = df.dropna(subset=['sentence', 'label'])
+    df = df[df['sentence'].str.strip() != '']  # Remove empty sentences
+    
+    if len(df) < initial_size:
+        print(f"⚠️  Removed {initial_size - len(df)} rows with missing/empty data")
     
     print(f"Dataset size: {len(df)} samples")
     print(f"Class distribution:\n{df['label'].value_counts()}")
@@ -102,6 +137,56 @@ def evaluate_knn_model():
                                 target_names=['Neutral', 'Self-Promotional'],
                                 digits=3))
     
+    # Error analysis - show misclassification examples
+    if show_examples:
+        print("\n" + "="*60)
+        print("🔍 ERROR ANALYSIS - MISCLASSIFICATION EXAMPLES")
+        print("="*60)
+        
+        # Get test data with predictions
+        test_indices = np.arange(len(X))[len(X_train):]  # Reconstruct test indices
+        test_sentences = df.iloc[test_indices]["sentence"].values
+        
+        # False positives (predicted self-promotional but actually neutral)
+        fp_mask = (y_pred == 1) & (y_test == 0)
+        if fp_mask.sum() > 0:
+            print(f"\n❌ FALSE POSITIVES ({fp_mask.sum()} total)")
+            print("   Predicted: Self-Promotional | Actual: Neutral")
+            print("-" * 60)
+            for i, idx in enumerate(np.where(fp_mask)[0][:n_examples]):
+                prob = y_pred_proba[idx][1]
+                print(f"{i+1}. [{prob:.3f}] {test_sentences[idx]}")
+        
+        # False negatives (predicted neutral but actually self-promotional)
+        fn_mask = (y_pred == 0) & (y_test == 1)
+        if fn_mask.sum() > 0:
+            print(f"\n❌ FALSE NEGATIVES ({fn_mask.sum()} total)")
+            print("   Predicted: Neutral | Actual: Self-Promotional")
+            print("-" * 60)
+            for i, idx in enumerate(np.where(fn_mask)[0][:n_examples]):
+                prob = y_pred_proba[idx][1]
+                print(f"{i+1}. [{prob:.3f}] {test_sentences[idx]}")
+        
+        # Show some correct predictions for comparison
+        print(f"\n✅ CORRECT PREDICTIONS (sample)")
+        print("-" * 60)
+        
+        # True positives
+        tp_mask = (y_pred == 1) & (y_test == 1)
+        if tp_mask.sum() > 0:
+            print(f"\nTrue Positives ({tp_mask.sum()} total) - examples:")
+            for i, idx in enumerate(np.where(tp_mask)[0][:3]):
+                prob = y_pred_proba[idx][1]
+                print(f"  [{prob:.3f}] {test_sentences[idx]}")
+        
+        # True negatives
+        tn_mask = (y_pred == 0) & (y_test == 0)
+        if tn_mask.sum() > 0:
+            print(f"\nTrue Negatives ({tn_mask.sum()} total) - examples:")
+            for i, idx in enumerate(np.where(tn_mask)[0][:3]):
+                prob = y_pred_proba[idx][1]
+                print(f"  [{prob:.3f}] {test_sentences[idx]}")
+    
     # Save metrics to JSON
     metrics = {
         "dataset": {
@@ -134,10 +219,18 @@ def evaluate_knn_model():
             "embedding_dimension": 384,
             "train_test_split": "80/20",
             "random_state": 42
+        },
+        "error_rates": {
+            "false_positive_rate": float(f"{fp/(fp+tn) if (fp+tn) > 0 else 0:.3f}"),
+            "false_negative_rate": float(f"{fn/(fn+tp) if (fn+tp) > 0 else 0:.3f}"),
+            "total_errors": int(fp + fn),
+            "error_rate": float(f"{(fp+fn)/len(y_test):.3f}")
         }
     }
     
-    with open("model_metrics.json", "w") as f:
+    # Save detailed results
+    output_path = "model_metrics.json"
+    with open(output_path, "w") as f:
         json.dump(metrics, f, indent=2)
     
     print("\n✅ Metrics saved to 'model_metrics.json'")
@@ -145,12 +238,78 @@ def evaluate_knn_model():
     
     return metrics
 
+
+def compare_with_threshold(threshold=0.5):
+    """
+    Test different probability thresholds for classification.
+    
+    Args:
+        threshold (float): Probability threshold for positive classification
+    """
+    print(f"\n🔬 THRESHOLD ANALYSIS (testing threshold = {threshold})")
+    print("="*60)
+    
+    df = pd.read_csv("data/self_promotion_dataset.csv", quoting=1, escapechar='\\', on_bad_lines='skip')
+    df = df.dropna(subset=['sentence', 'label'])
+    df = df[df['sentence'].str.strip() != '']
+    
+    bert_model = SentenceTransformer("all-MiniLM-L6-v2")
+    
+    X = bert_model.encode(df["sentence"].tolist(), show_progress_bar=False)
+    y = df["label"].astype(int).values
+    
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
+    
+    knn = KNeighborsClassifier(n_neighbors=5)
+    knn.fit(X_train, y_train)
+    
+    # Get probabilities
+    y_pred_proba = knn.predict_proba(X_test)[:, 1]
+    
+    # Test different thresholds
+    thresholds = [0.3, 0.4, 0.5, 0.6, 0.7]
+    
+    print("\nThreshold | Precision | Recall | F1-Score | Accuracy")
+    print("-" * 60)
+    
+    for t in thresholds:
+        y_pred = (y_pred_proba >= t).astype(int)
+        acc = accuracy_score(y_test, y_pred)
+        prec, rec, f1, _ = precision_recall_fscore_support(
+            y_test, y_pred, average='binary', zero_division=0
+        )
+        print(f"  {t:.1f}    |   {prec:.3f}   |  {rec:.3f} |  {f1:.3f}  |  {acc:.3f}")
+
+
 if __name__ == "__main__":
+    import sys
+    
     try:
-        metrics = evaluate_knn_model()
-    except FileNotFoundError:
-        print("Error: self_promotion_dataset.csv not found in current directory.")
+        # Run main evaluation
+        print("="*60)
+        print("KNN SELF-PROMOTION CLASSIFIER EVALUATION")
+        print("Core Academic Components: BERT + KNN")
+        print("="*60 + "\n")
+        
+        metrics = evaluate_knn_model(show_examples=True, n_examples=5)
+        
+        if metrics is None:
+            sys.exit(1)
+        
+        # Optional: threshold analysis
+        if len(sys.argv) > 1 and sys.argv[1] == "--threshold":
+            compare_with_threshold()
+        
+        print("\n✨ Evaluation complete!")
+        
+    except FileNotFoundError as e:
+        print(f"❌ Error: {e}")
+        print("Make sure 'data/self_promotion_dataset.csv' exists.")
+        sys.exit(1)
     except Exception as e:
-        print(f"Error during evaluation: {e}")
+        print(f"❌ Error during evaluation: {e}")
         import traceback
         traceback.print_exc()
+        sys.exit(1)

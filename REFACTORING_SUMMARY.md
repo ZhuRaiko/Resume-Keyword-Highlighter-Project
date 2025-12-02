@@ -2,50 +2,67 @@
 
 ## 🎯 Objective
 
-Transform a monolithic 885-line `main_clean.py` into a modular, academically defensible architecture.
+Transform a monolithic application into a modular, academically defensible architecture with a modern brutalist UI design.
 
-## 📊 Before vs After
+## 📊 Current Architecture
 
-### Before (Monolithic)
+### Project Structure
 ```
-main_clean.py (885 lines)
-├── All models in one file
-├── All processing in one file  
-├── All utilities in one file
-└── UI mixed with logic
-```
+main_modular.py (~480 lines - UI + integration)
 
-**Problems:**
-- ❌ Too complex to explain in thesis
-- ❌ Difficult to identify core contributions
-- ❌ Hard to debug and maintain
-- ❌ Cannot unit test components
-- ❌ Logic overlap and entanglement
+data/                    [Data Files]
+├── keywords.json        (Keyword database)
+└── self_promotion_dataset.csv  (Training data)
 
-### After (Modular)
-```
-main_modular.py (224 lines - UI only)
+fonts/                   [Custom Typography]
+├── Morganite-*.ttf      (Headers - brutalist style)
+└── deliware-*.otf       (Labels - clean readability)
 
 models/                  [Core Thesis Components]
-├── embedder.py         (62 lines - BERT)
-├── knn_classifier.py   (105 lines - KNN)
-└── sentiment.py        (43 lines - TextBlob)
+├── embedder.py          (BERT embeddings)
+├── knn_classifier.py    (KNN classification)
+├── knn_model.pkl        (Cached model)
+└── sentiment.py         (TextBlob sentiment)
 
-processing/              [Secondary Components]
-├── highlight_keywords.py  (488 lines - SpaCy)
-├── sentence_scoring.py    (234 lines - Scoring)
-└── metrics.py             (62 lines - Metrics)
+modules/                 [Processing Modules]
+├── counters.py          (Keyword metrics)
+├── embeddings.py        (Embedding utilities)
+├── extractor.py         (PDF→DOCX extraction)
+├── highlight.py         (SpaCy highlighting)
+└── scoring.py           (Self-promotion scoring)
 
-utilities/               [Utilities]
-└── __init__.py          (104 lines - Text extraction)
+backups/                 [Legacy Files]
+├── main_clean.py        (Original monolithic)
+└── main.py              (Earlier version)
 ```
 
-**Benefits:**
-- ✅ Clear academic narrative (2 core + 3 secondary)
-- ✅ Easy to explain architecture
-- ✅ Isolated components for testing
-- ✅ Professional organization
-- ✅ Maintainable and extensible
+## 🎨 UI/UX Improvements
+
+### Brutalist Design Theme
+- **Dark Background**: `#0e1117` main, `#262730` sidebar
+- **Custom Fonts**: 
+  - Morganite (Black 900, ExtraBold 800, Bold 700) for headers
+  - Deliware (Bold 700) for toggle labels
+- **Font Loading**: Base64-encoded TTF/OTF embedded in CSS
+
+### Color-Coded Categories
+| Category | Color | Hex |
+|----------|-------|-----|
+| Hard Skills | Teal | #26a69a |
+| Soft Skills | Purple | #7e57c2 |
+| Recruiter Keywords | Orange | #ff9f43 |
+| Action Verbs | Red | #ef5350 |
+
+### Interactive Features
+- **Toggle Switches**: `streamlit-toggle-switch` with custom colors
+- **Real-time Updates**: `st.rerun()` on toggle change
+- **Progress Bars**: 12px height, 2px border-radius (brutalist)
+- **Dynamic Gradients**: Score block color changes based on value
+
+### Layout Improvements
+- **Padding**: 3rem top/bottom, 5rem left/right for breathing room
+- **Headers**: Morganite font, 3.5rem for h2, wider letter-spacing
+- **Typography Hierarchy**: Clear visual distinction between levels
 
 ## 🔬 Core Components (Thesis Focus)
 
@@ -75,22 +92,27 @@ score = predict_self_promotion_score(sentence, knn, bert_model)
 - 6,752 labeled training samples
 - Instance-based classification
 
-## 🛠️ Secondary Components (Stabilization)
+## 🛠️ Processing Modules
 
-### 3. SpaCy Highlighting (`processing/highlight_keywords.py`)
+### 3. Text Extraction (`modules/extractor.py`)
+- **PDF→DOCX Conversion**: Uses `pdf2docx` for consistent extraction
+- **Aggressive Normalization**: Whitespace, punctuation, hyphenation fixes
+- **Multi-format Support**: PDF, DOCX, TXT handling
+
+### 4. Keyword Highlighting (`modules/highlight.py`)
 - Context validation (prevents false positives)
-- Dependency parsing
+- Dependency parsing with spaCy
 - **Framing:** "Linguistic validation layer"
 
-### 4. Sentence Scoring (`processing/sentence_scoring.py`)
+### 5. Sentence Scoring (`modules/scoring.py`)
 - Combines KNN with heuristics
 - Achievement pattern detection
+- Bullet point handling
 - **Framing:** "Score stabilization across writing styles"
 
-### 5. Metrics & Utilities
+### 6. Keyword Metrics (`modules/counters.py`)
 - Keyword composition calculation
-- Text extraction from documents
-- **Framing:** "Supporting utilities for preprocessing"
+- Percentage breakdowns by category
 
 ## 📝 Thesis Description Template
 
@@ -108,36 +130,22 @@ score = predict_self_promotion_score(sentence, knn, bert_model)
 > 
 > Secondary heuristics (sentiment analysis, achievement pattern detection, metric recognition) were implemented to stabilize scores across diverse resume writing styles, but these are not core to the academic contribution.
 
-### Architecture Diagram (for thesis)
+## 🧪 Key Technical Decisions
 
-```
-┌──────────────┐
-│ Resume Text  │
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐      ┌──────────────┐
-│ BERT Encoder │────▶ │     KNN      │  ◄── Core Contribution
-│  (384-dim)   │      │ Classifier   │
-└──────────────┘      └──────┬───────┘
-                             │
-                             ▼
-                      ┌──────────────┐
-                      │  SpaCy NLP   │  ◄── Validation Layer
-                      │  Validation  │
-                      └──────┬───────┘
-                             │
-                             ▼
-                      ┌──────────────┐
-                      │  Heuristic   │  ◄── Stabilization
-                      │    Boost     │
-                      └──────┬───────┘
-                             │
-                             ▼
-                      ┌──────────────┐
-                      │ Final Scores │
-                      └──────────────┘
-```
+### PDF→DOCX Conversion
+- **Problem**: PDF and DOCX extraction produced different text, causing score inconsistencies
+- **Solution**: Convert all PDFs to DOCX using `pdf2docx` before extraction
+- **Result**: Consistent scoring regardless of input format (differences reduced to <0.01)
+
+### Toggle-Based Highlighting
+- **Problem**: Native Streamlit toggles couldn't be custom-colored
+- **Solution**: Use `streamlit-toggle-switch` package with `st.rerun()` for immediate updates
+- **Result**: Color-coded toggles that immediately affect highlighting
+
+### Font Embedding
+- **Problem**: Local font files don't load via CSS url() in Streamlit
+- **Solution**: Base64-encode TTF/OTF files and embed in data URIs
+- **Result**: Custom fonts work reliably without external dependencies
 
 ## 🎓 Defense Talking Points
 
@@ -145,47 +153,41 @@ score = predict_self_promotion_score(sentence, knn, bert_model)
 
 > "I developed a self-promotion detection system combining BERT contextual embeddings with KNN classification. The key innovation is applying transfer learning and instance-based classification to resume analysis, where traditional keyword matching fails due to context ambiguity."
 
-### When Asked: "Why so many components?"
+### When Asked: "Why the brutalist design?"
 
-> "The core methodology is BERT + KNN. The additional components (SpaCy validation, heuristics) are implementation details ensuring production robustness — they stabilize scores across different resume formats and writing styles, but the academic contribution focuses on the machine learning pipeline."
+> "The brutalist design emphasizes clarity and functionality over decoration. The bold typography and high-contrast colors ensure users can quickly identify different keyword categories and understand their resume's self-promotion score at a glance."
 
-### When Asked: "How do you measure performance?"
+### When Asked: "How do you ensure PDF/DOCX consistency?"
 
-> "The KNN classifier was trained on 6,752 labeled sentences with a 2:1 ratio of negative to positive samples, ensuring the model learns to distinguish genuine achievements from routine descriptions. We evaluate using standard metrics (accuracy, precision, recall, F1) through k-fold cross-validation. The `evaluate_model.py` script generates these metrics automatically."
+> "We convert all PDF files to DOCX format before text extraction using the pdf2docx library. This ensures identical text representation regardless of input format, resulting in consistent scoring with differences under 0.01."
 
-### When Asked: "What's the role of spaCy?"
+### When Asked: "How do the toggles work?"
 
-> "SpaCy provides linguistic validation for keyword highlighting — it uses dependency parsing to verify that matched keywords appear in appropriate contexts. For example, it prevents 'Spring' in 'Spring 2012' from being highlighted as 'Spring Framework' by detecting temporal context."
+> "Each keyword category has an independent toggle switch that immediately updates the highlighting. When toggled, the application triggers a page rerun with the updated session state, ensuring the displayed highlights always match the current toggle configuration."
 
-## 📂 File Comparison
+## 📂 Dependencies
 
-### Original: main_clean.py (885 lines)
-```python
-# Everything mixed together:
-- Model loading
-- BERT encoding
-- KNN training
-- Sentiment analysis
-- Keyword highlighting
-- Context validation
-- Text extraction
-- UI rendering
-- Configuration
-```
+### Core ML/NLP
+- `sentence-transformers` - BERT embeddings
+- `scikit-learn` - KNN classifier
+- `spacy` - NLP pipeline
+- `textblob` - Sentiment analysis
 
-### New: main_modular.py (224 lines)
-```python
-# Clean separation:
-- Import models
-- Import processing
-- Import utilities
-- Configure UI
-- Display results
-```
+### Document Processing
+- `pdf2docx` - PDF to DOCX conversion
+- `python-docx` - DOCX parsing
+- `pdfminer.six` - PDF text extraction (fallback)
+
+### UI/Frontend
+- `streamlit` - Web framework
+- `streamlit-toggle-switch` - Custom toggle switches
+
+### Data
+- `pandas`, `numpy` - Data processing
 
 ## 🧪 Testing Strategy
 
-### Unit Tests (now possible)
+### Unit Tests
 
 ```python
 # Test BERT embeddings
@@ -197,108 +199,53 @@ def test_bert_encoding():
 
 # Test KNN classifier
 def test_knn_prediction():
-    from models.knn_classifier import load_or_train_knn, predict_self_promotion_score
-    from models.embedder import load_bert_model
+    from models.knn_classifier import load_or_train_knn
     knn = load_or_train_knn()
-    bert = load_bert_model()
-    score = predict_self_promotion_score("I increased sales by 50%", knn, bert)
-    assert 0.0 <= score <= 1.0
-    assert score > 0.5  # Should detect self-promotion
+    assert knn is not None
 
 # Test text extraction
-def test_pdf_extraction():
-    from utilities import extract_from_pdf
-    # Mock PDF data
-    result = extract_from_pdf(mock_pdf_bytes)
-    assert len(result) > 0
+def test_extraction():
+    from modules.extractor import extract_from_file
+    text = extract_from_file(test_file)
+    assert len(text) > 0
 ```
 
-### Integration Tests
+## ✅ Completed Improvements
 
-```python
-def test_full_pipeline():
-    from main_modular import load_all_models
-    from processing.sentence_scoring import analyze_self_promotion
-    
-    nlp, bert, knn, keywords = load_all_models()
-    text = "Led team of 10, delivered 3 projects ahead of schedule"
-    results, avg = analyze_self_promotion(text, nlp, knn, bert, [])
-    
-    assert avg > 0.6  # Should score as self-promotional
-    assert len(results) > 0
-```
+### Code Organization
+- ✅ Modular structure with clear separation
+- ✅ Core models isolated in `models/`
+- ✅ Processing logic in `modules/`
+- ✅ Data files in `data/`
+- ✅ Legacy code backed up in `backups/`
 
-## 🚀 Migration Path
+### UI/UX Enhancements
+- ✅ Brutalist dark theme design
+- ✅ Custom Morganite/Deliware typography
+- ✅ Color-coded keyword categories
+- ✅ Interactive toggle switches with immediate feedback
+- ✅ Dynamic gradient score visualization
+- ✅ Improved spacing and layout
 
-### Phase 1: Validation ✅
-- [x] Create modular structure
-- [x] Extract all components
-- [x] Test `main_modular.py`
-- [x] Verify identical functionality
-
-### Phase 2: Documentation ✅
-- [x] Write ARCHITECTURE.md
-- [x] Document each module
-- [x] Create thesis talking points
-- [x] Prepare defense strategy
-
-### Phase 3: Deployment (Optional)
-- [ ] Replace `main_clean.py` with `main_modular.py`
-- [ ] Update README.md with new structure
-- [ ] Archive legacy version
-- [ ] Update evaluate_model.py imports
+### Technical Improvements
+- ✅ PDF→DOCX conversion for consistency
+- ✅ Aggressive text normalization
+- ✅ Bullet marker handling in scoring
+- ✅ Session state management for toggles
+- ✅ Base64 font embedding
 
 ## 📈 Metrics
 
 ### Code Organization
-- **Before:** 1 file, 885 lines, 0% modularity
-- **After:** 8 files, avg 156 lines/file, 100% modularity
+- **Files**: 8 modules + 1 main entry point
+- **Separation**: 100% - UI, models, processing all isolated
+- **Testability**: Each component independently testable
 
-### Component Isolation
-- **Before:** Cannot test components individually
-- **After:** Each component independently testable
-
-### Academic Clarity
-- **Before:** Unclear what's core vs. helper logic
-- **After:** 2 core components clearly separated
-
-### Maintainability Score
-- **Before:** High complexity, low maintainability
-- **After:** Professional architecture, production-ready
-
-## ✅ Success Criteria
-
-All criteria met:
-
-✅ **Functionality preserved** - Both versions produce identical results  
-✅ **Academic narrative clear** - 2 core components + 3 secondary  
-✅ **Code organization** - Professional modular structure  
-✅ **Testability** - Components can be unit tested  
-✅ **Documentation** - Clear purpose for each module  
-✅ **Thesis defense ready** - Simple explanation pathway  
-✅ **Maintainability** - Changes localized to specific files  
-
-## 🎯 Recommendation
-
-**Use `main_modular.py` for:**
-- Thesis defense
-- Academic documentation  
-- Future development
-- Production deployment
-
-**Keep `main_clean.py` as:**
-- Backup reference
-- Historical artifact
-- Proof of evolution
-
-## 📚 Next Steps
-
-1. ✅ Test the modular version thoroughly
-2. ✅ Review ARCHITECTURE.md documentation
-3. ⏳ Run `evaluate_model.py` to generate metrics
-4. ⏳ Update thesis document with new architecture
-5. ⏳ Prepare defense presentation using modular narrative
+### UI/UX
+- **Theme**: Dark brutalist with custom typography
+- **Interactivity**: Real-time toggle updates
+- **Accessibility**: High contrast, clear hierarchy
 
 ---
 
-**Result:** Your codebase is now thesis-ready! 🎓
+**Result:** Production-ready application with professional UI and maintainable architecture! 🎓

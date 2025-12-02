@@ -135,19 +135,39 @@ def analyze_sentences(nlp, knn_model, _bert_model, text: str, action_verbs: list
         
         # Helper to split multi-sentence content while protecting terms
         def smart_split_sentences(content):
-            """Split content into sentences, protecting technical terms"""
-            # Don't split if it's a bullet point with only one sentence
-            # Check if content has clear sentence boundaries (. ! ? followed by space and capital letter)
-            has_multiple = len(re.findall(r'[.!?]\s+[A-Z]', content)) >= 1
+            """Split content into sentences, protecting technical terms and removing bullet markers"""
+            # Remove bullet markers and leading dashes from the beginning for clean splitting
+            # This allows us to split the content itself without the bullet interfering
+            content_clean = re.sub(r'^\s*[-•●○▪▫◦⦿⦾]\s+', '', content)
+            # Also remove standalone dash at the start
+            content_clean = re.sub(r'^\s*-\s+', '', content_clean)
             
-            if not has_multiple:
-                # Single sentence or fragment, return as-is
-                if len(content) >= 10:
-                    return [content]
+            # Check if content has clear sentence boundaries (. ! ? followed by space and capital letter)
+            # BUT ignore patterns where the capital letter is part of a grade
+            
+            if not content_clean or len(content_clean) < 10:
                 return []
             
-            # Temporarily replace protected terms
-            temp_content = content
+            # Count sentence boundaries in the cleaned content
+            # Look for ". A" patterns but exclude grade patterns like "A's"
+            sentence_boundaries = []
+            for match in re.finditer(r'[.!?]\s+[A-Z]', content_clean):
+                # Check if it's part of grade notation
+                pos = match.start()
+                context = content_clean[max(0, pos-5):min(len(content_clean), pos+10)]
+                # Skip if it's a grade pattern
+                if re.search(r'\d+\s*A[\'s]*', context):
+                    continue
+                sentence_boundaries.append(match)
+            
+            has_multiple = len(sentence_boundaries) >= 1
+            
+            if not has_multiple:
+                # Single sentence or fragment, return as-is (without bullet)
+                return [content_clean]
+            
+            # Temporarily replace protected terms in cleaned content
+            temp_content = content_clean
             replacements = {}
             for i, term in enumerate(protected_terms):
                 if term.lower() in temp_content.lower():
@@ -159,8 +179,8 @@ def analyze_sentences(nlp, knn_model, _bert_model, text: str, action_verbs: list
             
             # Use regex-based splitting for more reliable sentence boundaries
             # Split on . ! ? followed by whitespace and capital letter
-            # This is more reliable than spaCy for resume text
-            parts = re.split(r'(?<=[.!?])\s+(?=[A-Z])', temp_content)
+            # BUT not if followed by bullet marker
+            parts = re.split(r'(?<=[.!?])\s+(?=[A-Z](?![•●○▪▫◦⦿⦾]))', temp_content)
             
             results = []
             for part in parts:
@@ -193,16 +213,22 @@ def analyze_sentences(nlp, knn_model, _bert_model, text: str, action_verbs: list
                 sentence_count = len(re.findall(r'[.!?]\s+[A-Z]', line))
                 
                 if sentence_count >= 1:
-                    # Has multiple sentences - split them
+                    # Has multiple sentences - split them (bullets will be removed in splitting)
                     split_sents = smart_split_sentences(line)
                     if split_sents:
                         sentences.extend(split_sents)
                     else:
-                        # Fallback: keep original if split failed
-                        sentences.append(line)
+                        # Fallback: keep original with bullet and dash removed
+                        clean_line = re.sub(r'^\s*[-•●○▪▫◦⦿⦾]\s+', '', line)
+                        clean_line = re.sub(r'^\s*-\s+', '', clean_line)
+                        if clean_line:
+                            sentences.append(clean_line)
                 else:
-                    # Single sentence or bullet - keep as-is
-                    sentences.append(line)
+                    # Single sentence - remove bullet, dash and keep content
+                    clean_line = re.sub(r'^\s*[-•●○▪▫◦⦿⦾]\s+', '', line)
+                    clean_line = re.sub(r'^\s*-\s+', '', clean_line)
+                    if clean_line:
+                        sentences.append(clean_line)
         
         elif file_type == 'txt' or file_type == 'text_input':
             # TXT/text input: Use spaCy sentence detection with protection
@@ -217,6 +243,9 @@ def analyze_sentences(nlp, knn_model, _bert_model, text: str, action_verbs: list
         for stxt in sentences:
             if not stxt:
                 continue
+            # Extra normalization for consistent scoring
+            stxt = re.sub(r'\s+', ' ', stxt).strip()  # Normalize all whitespace to single spaces
+            stxt = re.sub(r'\s+([.,;:!?])', r'\1', stxt)  # Remove spaces before punctuation
             stxt_lower = stxt.lower()
             base = get_base_score(knn_model, _bert_model, stxt)
             metric_bonus = 0.15 if has_metric(stxt) else 0.0

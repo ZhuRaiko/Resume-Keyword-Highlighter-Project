@@ -1,14 +1,31 @@
 # Resume Keyword Highlighter - SkillHighlight Analyzer
 
-An intelligent resume analysis tool that highlights keywords, assesses self-promotion quality, and provides actionable insights for resume optimization.
+An intelligent resume analysis tool that highlights keywords, assesses self-promotion quality, and provides actionable insights for resume optimization. Features a modern **brutalist UI design** with custom typography and color-coded keyword categories.
 
 ## Features
 
 - **Smart Keyword Highlighting**: Context-aware detection of Hard Skills, Soft Skills, Recruiter Keywords, and Action Verbs
 - **Self-Promotion Analysis**: ML-powered scoring of resume sentences for achievement-oriented language
-- **Interactive Dashboard**: Real-time visualization of keyword composition and sentence quality
-- **Multi-Format Support**: PDF, DOCX, and TXT file processing
-- **Configurable Heuristics**: Sidebar controls for customizing matching strictness
+- **Interactive Dashboard**: Real-time visualization with toggle switches to enable/disable keyword categories
+- **Multi-Format Support**: PDF, DOCX, and TXT file processing with PDF→DOCX conversion for consistency
+- **Brutalist UI Design**: Custom Morganite and Deliware fonts with dark theme and color-coded elements
+- **Dynamic Score Visualization**: Gradient colors that change based on self-promotion score
+
+## UI/UX Features
+
+### Brutalist Design Theme
+- **Dark Background**: `#0e1117` with sidebar at `#262730`
+- **Custom Typography**: Morganite font for headers (900-500 weights), Deliware for labels
+- **Color-Coded Categories**:
+  - Hard Skills: Teal (#26a69a)
+  - Soft Skills: Purple (#7e57c2)
+  - Recruiter Keywords: Orange (#ff9f43)
+  - Action Verbs: Red (#ef5350)
+
+### Interactive Controls
+- **Toggle Switches**: Enable/disable highlighting per category with immediate visual feedback
+- **Progress Bars**: Compact 12px bars showing keyword composition
+- **Dynamic Gradients**: Score block changes from green (>0.8) to yellow (0.5-0.8) to red (<0.5)
 
 ## Model Performance
 
@@ -82,6 +99,9 @@ cd Resume-Keyword-Highlighter-Project
 # Install dependencies
 pip install -r requirements.txt
 
+# Additional packages for UI and PDF processing
+pip install streamlit-toggle-switch pdf2docx
+
 # Download spaCy model
 python -m spacy download en_core_web_sm
 ```
@@ -91,7 +111,7 @@ python -m spacy download en_core_web_sm
 ### Run the Streamlit App
 
 ```bash
-streamlit run main_clean.py
+streamlit run main_modular.py
 ```
 
 ### Evaluate Model Performance
@@ -107,66 +127,63 @@ This generates detailed metrics including:
 - Classification report
 - Saves results to `model_metrics.json`
 
-## Configuration
-
-Configure matching behavior via sidebar controls:
-
-- **Token-Aligned Mode**: Highlight whole tokens (safer for punctuation)
-- **Relax HARD Skills**: Allow without strict noun/object requirements
-- **Relax ACTION Verbs**: Allow without direct object requirement
-- **Relax SOFT Skills**: Skip negative sentiment suppression
-- **Relax RECRUITER Keywords**: Allow in verbless bullets
-- **Sentiment Threshold**: Adjust soft skill sentiment filter (-1.0 to 0.0)
-
-## File Structure
+## Project Structure
 
 ```
 Resume-Keyword-Highlighter-Project/
-├── main_clean.py                    # Main application (production)
-├── main.py                          # Original implementation
-├── keywords.json                    # Keyword database (4 categories)
-├── self_promotion_dataset.csv       # Training data (6,752 samples)
-├── evaluate_model.py               # Model evaluation script
-├── knn_model.pkl                   # Cached KNN model
-├── model_metrics.json              # Evaluation results
-└── tests/
-    └── highlight_test.py           # Unit tests
-
+├── main_modular.py              # Main Streamlit application
+├── evaluate_model.py            # Model evaluation script
+│
+├── data/
+│   ├── keywords.json            # Keyword database (4 categories)
+│   └── self_promotion_dataset.csv  # Training data (6,752 samples)
+│
+├── fonts/
+│   ├── Morganite-*.ttf          # Morganite font family
+│   └── deliware-*.otf           # Deliware font family
+│
+├── models/
+│   ├── embedder.py              # BERT embeddings
+│   ├── knn_classifier.py        # KNN classification
+│   ├── knn_model.pkl            # Cached model
+│   └── sentiment.py             # Sentiment analysis
+│
+├── modules/
+│   ├── counters.py              # Keyword metrics
+│   ├── embeddings.py            # Embedding utilities
+│   ├── extractor.py             # Text extraction (PDF→DOCX)
+│   ├── highlight.py             # Keyword highlighting
+│   └── scoring.py               # Self-promotion scoring
+│
+└── backups/                     # Legacy versions
 ```
 
 ## Dependencies
 
 - **streamlit** - Web interface
+- **streamlit-toggle-switch** - Custom toggle switches
 - **sentence-transformers** - BERT embeddings
 - **spacy** - NLP pipeline
 - **scikit-learn** - KNN classifier
 - **textblob** - Sentiment analysis
-- **pdfminer.six** - PDF extraction
-- **docx2txt** - DOCX extraction
+- **pdf2docx** - PDF to DOCX conversion
+- **python-docx** - DOCX processing
+- **pdfminer.six** - PDF text extraction (fallback)
 - **pandas, numpy** - Data processing
 
-## Context-Aware Features
+## Key Features Explained
 
-### Skill Enumeration Detection
-Highlights complete phrases like "Strong communication and leadership skills" as a single unit.
+### PDF→DOCX Conversion
+For consistent text extraction across formats, PDFs are converted to DOCX before processing. This ensures identical scoring results regardless of input format.
 
-### Context Validation
-Uses dependency parsing to prevent false positives:
-- "quality" in "quality assurance" → not highlighted alone
-- Validates POS tags and grammatical relationships
+### Toggle-Based Highlighting
+Each keyword category can be independently enabled/disabled with immediate visual feedback. Toggles trigger a page rerun to update highlighting in real-time.
 
-### Achievement Pattern Recognition
-Detects patterns like:
-- "Achieved X by doing Y"
-- Bullet points with metrics
-- Action verbs with measurable results
-
-## Performance Optimizations
-
-- **Single spaCy Pass**: Cached tokens, POS tags, dependencies
-- **Lemma-Based Normalization**: Pre-computed keyword maps
-- **Longest-First Matching**: Minimizes redundant checks
-- **Model Caching**: `@st.cache_resource` for fast loading
+### Dynamic Score Gradients
+The self-promotion score block uses color gradients to communicate quality:
+- **Green** (>0.8): Excellent self-promotion
+- **Yellow/Orange** (0.5-0.8): Good, with room for improvement
+- **Red** (<0.5): Needs stronger achievement language
 
 ## Future Enhancements
 

@@ -178,7 +178,7 @@ def highlight_keywords(nlp, text: str, hard_skills: list, soft_skills: list,
                 s_char = window[0].idx
                 e_char = window[-1].idx + len(window[-1].text)
                 matched_text = text[s_char:e_char].strip()
-                color = '#1976d2'
+                color = '#7e57c2'
                 html = f"<span style='background-color:{color}; color:white; padding:2px 4px; border-radius:3px;'>{matched_text}</span>"
                 replacements.append((s_char, e_char, html))
                 for k in range(enum_start, enum_end):
@@ -314,11 +314,11 @@ def highlight_keywords(nlp, text: str, hard_skills: list, soft_skills: list,
                         continue
                     if not is_valid_context(window, label):
                         continue
-                color = '#4caf50'
+                color = '#26a69a'
             
             elif label == 'SOFT':
                 if relax_soft:
-                    color = '#1976d2'
+                    color = '#7e57c2'
                 else:
                     neg = False
                     boost = False
@@ -330,7 +330,7 @@ def highlight_keywords(nlp, text: str, hard_skills: list, soft_skills: list,
                             boost = True
                     if neg:
                         continue
-                    color = '#1976d2' if not boost else '#0d47a1'
+                    color = '#7e57c2' if not boost else '#5e35b1'
             
             elif label == 'ACTION':
                 has_verb_obj = False
@@ -340,14 +340,14 @@ def highlight_keywords(nlp, text: str, hard_skills: list, soft_skills: list,
                         break
                 if not has_verb_obj:
                     continue
-                color = '#c62828'
+                color = '#ef5350'
             
             else:  # RECRUITER
                 if not relax_recruiter and not sent_has_verb.get(sent_idx, True):
                     downgraded = True
                 else:
                     downgraded = False
-                color = '#ff9800' if not downgraded else '#ffdebc'
+                color = '#ff9f43' if not downgraded else '#ffd79d'
 
             # Build HTML
             matched_text = text[new_s:new_e]
