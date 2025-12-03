@@ -29,6 +29,13 @@ def normalize_resume_text(raw: str) -> str:
     # Normalize line endings
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     
+    # Clean up table artifacts from PDF conversion
+    text = re.sub(r'\|\s*\|', ' ', text)  # Remove empty cell markers
+    text = re.sub(r'^\s*\||\|\s*$', '', text, flags=re.MULTILINE)  # Remove leading/trailing pipes
+    text = re.sub(r'\s*\|\s*', ' ', text)  # Replace remaining pipes with spaces
+    text = re.sub(r'-{3,}', '', text)  # Remove horizontal rules (dashes)
+    text = re.sub(r'\.{3,}', '', text)  # Remove dot leaders
+    
     # Aggressive whitespace normalization for PDF artifacts
     # Remove multiple spaces within lines
     text = re.sub(r'[ \t]{2,}', ' ', text)
@@ -301,26 +308,45 @@ def extract_from_file(uploaded_file) -> str:
                     cv.convert(docx_path, start=0, end=None)
                     cv.close()
                     
-                    # Now extract from the DOCX (same as DOCX extraction below)
+                    # Now extract from the DOCX
                     doc = Document(docx_path)
                     text_parts = []
                     
                     for element in doc.element.body:
                         if isinstance(element, CT_P):
                             para = Paragraph(element, doc)
-                            para_text = para.text
-                            if para_text.strip():
-                                text_parts.append(para_text)
+                            para_text = para.text.strip()
+                            if para_text:
+                                # Clean artifacts
+                                para_text = re.sub(r'\s*\|\s*', ' ', para_text)
+                                para_text = re.sub(r'-{2,}', '', para_text)
+                                if para_text.strip():
+                                    text_parts.append(para_text.strip())
                         elif isinstance(element, CT_Tbl):
+                            # Handle tables: extract each cell separately to preserve structure
                             table = Table(element, doc)
                             for row in table.rows:
                                 for cell in row.cells:
-                                    cell_text = cell.text.strip()
-                                    if cell_text:
-                                        text_parts.append(cell_text)
+                                    # Get all paragraphs in the cell
+                                    for para in cell.paragraphs:
+                                        cell_text = para.text.strip()
+                                        if cell_text:
+                                            # Clean up artifacts
+                                            cell_text = re.sub(r'\s*\|\s*', ' ', cell_text)
+                                            cell_text = re.sub(r'-{2,}', '', cell_text)
+                                            cell_text = re.sub(r'^\s*\||\|\s*$', '', cell_text)
+                                            if cell_text.strip():
+                                                text_parts.append(cell_text.strip())
                     
-                    result = '\n\n'.join(text_parts)
-                    return result
+                    # Join with newlines - each part is its own line
+                    result = '\n'.join(text_parts)
+                    
+                    # Clean up any remaining artifacts
+                    result = re.sub(r'\|\s*\|', '', result)
+                    result = re.sub(r'-{3,}', '', result)
+                    result = re.sub(r'\n{3,}', '\n\n', result)
+                    
+                    return result.strip()
                 finally:
                     # Clean up temp files
                     try:
@@ -372,51 +398,12 @@ def extract_from_file(uploaded_file) -> str:
                         pass
                         
             except Exception:
-                # Fallback to PyMuPDF with dict mode
+                # Final fallback to pdfminer
                 try:
-                    import fitz
-                    import re
-                    doc = fitz.open(stream=data, filetype="pdf")
-                    lines = []
-                    prev_font_size = None
-                    
-                    for page in doc:
-                        text_dict = page.get_text("dict")
-                        for block in text_dict.get("blocks", []):
-                            if block.get("type") == 0:  # text block
-                                for line in block.get("lines", []):
-                                    line_text = ""
-                                    font_size = None
-                                    
-                                    for span in line.get("spans", []):
-                                        line_text += span.get("text", "")
-                                        if font_size is None:
-                                            font_size = span.get("size", 0)
-                                    
-                                    line_text = line_text.strip()
-                                    if line_text:
-                                        # Add blank line for visual spacing in certain cases
-                                        if lines:
-                                            is_bullet = re.match(r'^[-•●○▪▫◦⦿⦾]\s', line_text)
-                                            # Add spacing before bullets or when font size changes significantly
-                                            if is_bullet or (prev_font_size and font_size and abs(font_size - prev_font_size) > 1.5):
-                                                lines.append("")
-                                                # Add special marker to prevent continuation merging across font changes
-                                                if prev_font_size and font_size and abs(font_size - prev_font_size) > 1.5:
-                                                    line_text = "[FONT_CHANGE]" + line_text
-                                        
-                                        lines.append(line_text)
-                                        prev_font_size = font_size
-                    
-                    doc.close()
-                    return '\n'.join(lines)
-                except Exception:
-                    # Final fallback to pdfminer
-                    try:
-                        from pdfminer.high_level import extract_text as extract_pdf_text
-                        return extract_pdf_text(io.BytesIO(data))
-                    except Exception as e:
-                        raise Exception(f"PDF extraction failed: {e}")
+                    from pdfminer.high_level import extract_text as extract_pdf_text
+                    return extract_pdf_text(io.BytesIO(data))
+                except Exception as e:
+                    raise Exception(f"PDF extraction failed: {e}")
         
         elif name.endswith('.docx'):
             try:

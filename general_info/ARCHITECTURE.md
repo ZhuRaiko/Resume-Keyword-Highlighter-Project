@@ -63,7 +63,9 @@ The application uses a **brutalist design aesthetic** with:
 ### Third-Party UI Components
 
 - **streamlit-toggle-switch**: Custom colored toggle switches for category control
-- **pdf2docx**: PDF to DOCX conversion for consistent text extraction
+- **pdf2docx**: PDF to DOCX conversion (primary extraction)
+- **docling**: PDF text extraction (fallback #1)
+- **pdfminer.six**: PDF text extraction (fallback #2)
 
 ## 🎓 Academic Framing
 

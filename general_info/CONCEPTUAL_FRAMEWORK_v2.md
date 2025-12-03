@@ -130,7 +130,7 @@ Resume Document          ───►   Text Extraction           ───►  
 | **Classification** | scikit-learn KNN (k=5) | Self-promotion prediction |
 | **NLP Pipeline** | spaCy (en_core_web_sm) | Linguistic analysis & validation |
 | **Sentiment** | TextBlob | Polarity scoring for adjustments |
-| **Document Processing** | pdf2docx, pdfminer, python-docx | Multi-format text extraction |
+| **Document Processing** | pdf2docx, Docling, pdfminer, python-docx | Multi-format text extraction |
 | **Web Interface** | Streamlit | Interactive user interface |
 
 ---

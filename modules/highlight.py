@@ -333,13 +333,14 @@ def highlight_keywords(nlp, text: str, hard_skills: list, soft_skills: list,
                     color = '#7e57c2' if not boost else '#5e35b1'
             
             elif label == 'ACTION':
-                has_verb_obj = False
-                for t in window:
-                    if t.pos_ == 'VERB' and any(c.dep_ == 'dobj' for c in t.children):
-                        has_verb_obj = True
-                        break
-                if not has_verb_obj:
-                    continue
+                if not relax_action:
+                    has_verb_obj = False
+                    for t in window:
+                        if t.pos_ == 'VERB' and any(c.dep_ == 'dobj' for c in t.children):
+                            has_verb_obj = True
+                            break
+                    if not has_verb_obj:
+                        continue
                 color = '#ef5350'
             
             else:  # RECRUITER

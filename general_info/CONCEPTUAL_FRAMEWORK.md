@@ -450,8 +450,9 @@ This conceptual framework illustrates the theoretical foundation and system arch
     • spacy               - NLP pipeline
     • scikit-learn        - KNN classifier
     • textblob            - Sentiment analysis
-    • pdf2docx            - PDF conversion
-    • pdfminer.six        - PDF extraction
+    • pdf2docx            - PDF conversion (primary)
+    • Docling             - PDF extraction (fallback #1)
+    • pdfminer.six        - PDF extraction (fallback #2)
     • python-docx         - DOCX processing
 ```
 
@@ -546,7 +547,7 @@ This conceptual framework illustrates the theoretical foundation and system arch
 | **Classification** | KNN (k=5) | Predict self-promotion score | Supervised learning on labeled data |
 | **NLP Pipeline** | spaCy (en_core_web_sm) | POS tagging, dependency parsing | Linguistic context validation |
 | **Sentiment** | TextBlob | Polarity scoring | Language tone adjustment |
-| **Text Extraction** | pdf2docx, pdfminer | Document parsing | Format normalization |
+| **Text Extraction** | pdf2docx, Docling, pdfminer | Document parsing | Format normalization |
 | **UI Framework** | Streamlit | Interactive web interface | User accessibility |
 
 ---

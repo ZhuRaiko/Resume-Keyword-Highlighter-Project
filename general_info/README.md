@@ -82,7 +82,7 @@ Our self-promotion classifier achieves strong performance using a K-Nearest Neig
    - Time Complexity: O(n)
 6. **Achievement Pattern Detection** - Action word + impact detection
    - Time Complexity: O(n)
-7. **File Extraction** - PDF/DOCX parsing (pdfminer, docx2txt)
+7. **File Extraction** - PDF/DOCX parsing (pdf2docx, Docling, pdfminer)
    - Time Complexity: O(document size)
 
 ### Overall Pipeline Complexity
@@ -166,9 +166,10 @@ Resume-Keyword-Highlighter-Project/
 - **spacy** - NLP pipeline
 - **scikit-learn** - KNN classifier
 - **textblob** - Sentiment analysis
-- **pdf2docx** - PDF to DOCX conversion
+- **pdf2docx** - PDF to DOCX conversion (primary)
+- **docling** - PDF text extraction (fallback #1)
+- **pdfminer.six** - PDF text extraction (fallback #2)
 - **python-docx** - DOCX processing
-- **pdfminer.six** - PDF text extraction (fallback)
 - **pandas, numpy** - Data processing
 
 ## Key Features Explained

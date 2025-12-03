@@ -174,9 +174,10 @@ score = predict_self_promotion_score(sentence, knn, bert_model)
 - `textblob` - Sentiment analysis
 
 ### Document Processing
-- `pdf2docx` - PDF to DOCX conversion
+- `pdf2docx` - PDF to DOCX conversion (primary)
+- `docling` - PDF text extraction (fallback #1)
+- `pdfminer.six` - PDF text extraction (fallback #2)
 - `python-docx` - DOCX parsing
-- `pdfminer.six` - PDF text extraction (fallback)
 
 ### UI/Frontend
 - `streamlit` - Web framework
