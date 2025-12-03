@@ -135,4 +135,105 @@ Resume Document          ───►   Text Extraction           ───►  
 
 ---
 
+## Research Gaps & Limitations
+
+This section identifies the current gaps and limitations within each phase of the framework, providing transparency about the system's boundaries and opportunities for future research.
+
+### Gap Analysis by Framework Column
+
+```
+┌──────────────────────┬───────────────────────────┬────────────────────────────┬──────────────────────────┐
+│   DATA & PREPARATION │  REPRESENTATION & ENCODING│   LEARNING & EXTRACTION    │  KNOWLEDGE APPLICATION   │
+│        GAPS          │          GAPS             │          GAPS              │          GAPS            │
+├──────────────────────┼───────────────────────────┼────────────────────────────┼──────────────────────────┤
+│                      │                           │                            │                          │
+│  ⚠ Limited to        │  ⚠ Pre-trained model      │  ⚠ KNN is simpler than     │  ⚠ No real recruiter     │
+│    English resumes   │    not fine-tuned on      │    deep learning           │    validation of         │
+│                      │    resume-specific data   │    alternatives            │    scoring accuracy      │
+│  ⚠ PDF extraction    │                           │                            │                          │
+│    fallback chain    │  ⚠ 384-dim embeddings     │  ⚠ Binary classification   │  ⚠ No A/B testing with   │
+│    may lose          │    may miss nuanced       │    (0/1) loses             │    actual job            │
+│    formatting        │    resume semantics       │    granularity             │    applications          │
+│                      │                           │                            │                          │
+│  ⚠ No image/chart    │  ⚠ Static keyword         │  ⚠ Dataset limited to      │  ⚠ Industry-agnostic     │
+│    text extraction   │    database requires      │    10,000 samples          │    scoring (no domain    │
+│                      │    manual updates         │                            │    customization)        │
+│                      │                           │                            │                          │
+│  ⚠ Multi-column      │  ⚠ No multi-lingual       │  ⚠ No continuous           │  ⚠ User feedback not     │
+│    layouts may       │    support                │    learning/model          │    incorporated into     │
+│    extract poorly    │                           │    updates                 │    model improvement     │
+│                      │                           │                            │                          │
+└──────────────────────┴───────────────────────────┴────────────────────────────┴──────────────────────────┘
+```
+
+### Detailed Gap Descriptions
+
+#### Column 1: Data & Preparation Gaps
+
+| Gap | Description | Impact |
+|-----|-------------|--------|
+| **Language Limitation** | System only processes English-language resumes | Excludes non-English job markets |
+| **PDF Extraction Quality** | Complex PDF layouts (multi-column, tables, graphics) may not extract cleanly | Loss of structural information |
+| **No OCR Support** | Scanned PDFs or image-based resumes cannot be processed | Limits input format compatibility |
+| **Formatting Loss** | Original resume formatting (bold, italics, bullets) not preserved in analysis | Context from visual hierarchy lost |
+
+#### Column 2: Representation & Encoding Gaps
+
+| Gap | Description | Impact |
+|-----|-------------|--------|
+| **Generic Pre-trained Model** | all-MiniLM-L6-v2 trained on general text, not resume-specific corpus | May miss domain-specific semantics |
+| **Static Keyword Database** | Keywords manually curated; no automatic discovery of emerging terms | Database may become outdated |
+| **Fixed Embedding Dimensions** | 384 dimensions may not capture all nuances of professional language | Potential information compression |
+| **No Contextual Keyword Weighting** | All keyword categories weighted equally regardless of job type | One-size-fits-all approach |
+
+#### Column 3: Learning & Extraction Gaps
+
+| Gap | Description | Impact |
+|-----|-------------|--------|
+| **Simple Classifier** | KNN chosen over deep learning (LSTM, transformers) for interpretability | May sacrifice accuracy for simplicity |
+| **Binary Labels** | Self-promotion scored as 0 or 1, not on a continuous scale | Loses nuance in borderline cases |
+| **Dataset Size** | 10,000 samples sufficient but smaller than industry-scale datasets | May not generalize to all resume styles |
+| **No Online Learning** | Model is static; doesn't improve from user interactions | Cannot adapt to new patterns |
+| **Single Dataset Source** | Training data from one curated source | May have inherent biases |
+
+#### Column 4: Knowledge Application Gaps
+
+| Gap | Description | Impact |
+|-----|-------------|--------|
+| **No Recruiter Validation** | Scores not validated against actual recruiter preferences | Uncertain real-world effectiveness |
+| **No Outcome Tracking** | Cannot measure if highlighted resumes lead to more interviews | No empirical success metrics |
+| **Industry Agnostic** | Same scoring criteria for all industries (tech, healthcare, finance) | May not reflect domain norms |
+| **No Personalization** | Cannot adapt recommendations to specific job postings | Generic feedback only |
+| **Heuristic Adjustments** | Score adjustments (metrics, achievements) are rule-based, not learned | May not capture all patterns |
+
+---
+
+### Scope Delimitations
+
+The following are **intentional exclusions** from the current research scope:
+
+| Exclusion | Rationale |
+|-----------|-----------|
+| **Real-time recruiter feedback loop** | Requires industry partnership and longitudinal study |
+| **Multi-language support** | Would require separate NLP pipelines and datasets |
+| **Job posting matching** | Different research problem (job-resume matching) |
+| **ATS compatibility scoring** | Proprietary systems with unknown criteria |
+| **Resume generation/rewriting** | Focus is on analysis, not content creation |
+
+---
+
+### Future Research Opportunities
+
+Based on identified gaps, future work could address:
+
+1. **Fine-tuning BERT on resume corpus** - Improve domain-specific embeddings
+2. **Multi-class scoring** - Replace binary with 5-point self-promotion scale
+3. **Industry-specific models** - Train separate classifiers per domain
+4. **Recruiter validation study** - Partner with HR professionals for ground truth
+5. **Continuous learning pipeline** - Incorporate user feedback for model updates
+6. **Multi-lingual expansion** - Add support for Spanish, Mandarin, etc.
+7. **ATS simulation** - Reverse-engineer common ATS scoring patterns
+
+---
+
 *Framework Version: 2.0 | December 2024*
