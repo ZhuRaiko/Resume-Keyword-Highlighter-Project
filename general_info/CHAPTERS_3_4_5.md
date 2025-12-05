@@ -1,4 +1,4 @@
-# SkillHighlight Thesis: Chapters 3, 4, and 5 Template
+# SkillHighlight Thesis: Chapters 3, 4, and 5
 
 ---
 
@@ -135,7 +135,125 @@ The SkillHighlight system consists of five main modules:
 4. Fit KNN classifier on training embeddings
 5. Evaluate on held-out test set
 
-### 3.7 Evaluation Metrics
+### 3.7 Scoring Algorithm
+
+The self-promotion scoring system combines the KNN classifier output with heuristic bonuses to produce a final score between 0.0 and 1.0. This hybrid approach leverages both machine learning predictions and rule-based enhancements for improved accuracy.
+
+#### 3.7.1 KNN Base Probability
+
+The KNN classifier computes the probability that a sentence is self-promotional based on its k nearest neighbors in the embedding space:
+
+```
+P_KNN(s) = k_self-promo / k
+```
+![alt text](image.png)
+
+Where:
+- **s** = input sentence embedding
+- **k** = 5 (number of neighbors)
+- **k_self-promo** = count of neighbors classified as self-promotional
+
+![alt text](image-2.png)
+
+The similarity between sentence embeddings is measured using **Euclidean distance** in the 384-dimensional space:
+
+```
+d(x, y) = √[ Σ (xᵢ - yᵢ)² ]  for i = 1 to 384
+```
+![alt text](image-1.png)
+
+#### 3.7.2 Final Score Computation
+
+The final self-promotion score incorporates the KNN probability with several heuristic bonuses and penalties:
+
+```
+Score(s) = clamp( P_KNN + B_metric + B_achieve + B_bullet + B_sentiment + B_action + P_length )
+```
+![alt text](image-3.png)
+
+Where **clamp(x) = min(1.0, max(0.0, x))** ensures the score remains within [0, 1].
+
+#### 3.7.3 Heuristic Components
+
+The following table summarizes the bonus and penalty values applied to each sentence:
+
+| Component | Symbol | Value | Condition |
+|-----------|--------|-------|----------|
+| **Metric Bonus** | B_metric | +0.15 | Contains quantifiable metrics (e.g., "45%", "$500K", "12 engineers") |
+| **Achievement Bonus** | B_achieve | +0.12 | Contains both an achievement verb AND an impact word |
+| **Bullet Point Bonus** | B_bullet | +0.08 | Sentence starts with bullet marker (•, -, 1.) |
+| **Sentiment Boost** | B_sentiment | +0.06 | TextBlob sentiment polarity > 0.15 |
+| **Action Verb Bonus** | B_action | +0.08 | First word is a recognized action verb |
+| **Length Penalty** | P_length | −0.10 | Sentence contains fewer than 5 words |
+
+![alt text](image-4.png)
+
+#### 3.7.4 Achievement Pattern Detection
+
+The achievement bonus requires the presence of both an achievement verb and an impact indicator:
+
+```
+B_achieve = 0.12   if (sentence contains word from A) AND (sentence contains word from I)
+          = 0      otherwise
+```
+
+![alt text](image-5.png)
+
+Where:
+- **A (Achievement Verbs)** = {achieved, delivered, improved, increased, reduced, led, managed, developed, created, launched, implemented, drove, exceeded, optimized, streamlined, established, built, designed, spearheaded, pioneered}
+- **I (Impact Words)** = {resulting, leading to, by, saved, generated, boosted, enhanced}
+
+#### 3.7.5 Metric Detection
+
+Quantifiable achievements are detected using regular expression pattern matching:
+
+```
+B_metric = 0.15   if sentence matches pattern: (\d+% | \d{1,3} | $\d+[kKmM]?)
+         = 0      otherwise
+```
+![alt text](image-6.png)
+
+This pattern captures percentages (e.g., "45%"), small numbers (e.g., "12 engineers"), and monetary values (e.g., "$500K").
+
+#### 3.7.6 Sentiment Polarity
+
+The sentiment boost rewards sentences with positive emotional tone, calculated using TextBlob's sentiment analyzer:
+
+```
+B_sentiment = 0.06   if polarity(s) > 0.15
+            = 0      otherwise
+```
+![alt text](image-7.png)
+TextBlob computes sentiment polarity as a value between -1.0 (negative) and +1.0 (positive):
+
+```
+polarity(s) = Σ(word_polarity × word_intensity) / n
+```
+![alt text](image-8.png)
+
+Where:
+- **word_polarity** = sentiment score of each word from TextBlob's lexicon
+- **word_intensity** = modifier effect (e.g., "very" increases intensity)
+- **n** = number of sentiment-bearing words
+
+Example polarity values:
+| Sentence | Polarity | Bonus Applied |
+|----------|----------|---------------|
+| "Successfully delivered project ahead of schedule" | +0.35 | +0.06 ✓ |
+| "Responsible for data entry tasks" | +0.00 | +0.00 |
+| "Achieved excellent results through teamwork" | +0.65 | +0.06 ✓ |
+
+#### 3.7.7 Classification Thresholds
+
+For evaluation purposes, sentences are classified based on their final scores:
+
+| Classification | Threshold | Interpretation |
+|----------------|-----------|----------------|
+| **HIGH** self-promotion | Score > 0.55 | Strong, achievement-oriented language |
+| **LOW** self-promotion | Score < 0.50 | Weak, passive, or vague language |
+| **Borderline** | 0.50 ≤ Score ≤ 0.55 | Ambiguous cases requiring review |
+
+### 3.8 Evaluation Metrics
 
 The model was evaluated using standard classification metrics:
 
@@ -186,11 +304,11 @@ The KNN classifier achieved the following results on the held-out test set (2,00
 
 | Fold | F1-Score |
 |------|----------|
-| Fold 1 | [value] |
-| Fold 2 | [value] |
-| Fold 3 | [value] |
-| Fold 4 | [value] |
-| Fold 5 | [value] |
+| Fold 1 | 0.609 |
+| Fold 2 | 0.761 |
+| Fold 3 | 0.883 |
+| Fold 4 | 0.949 |
+| Fold 5 | 0.884 |
 | **Mean** | **0.817 (±0.121)** |
 
 #### Discussion of Model Performance:
@@ -204,11 +322,16 @@ The cross-validation mean F1-score of **0.817** with standard deviation of **±0
 ```
                     Predicted
                  Positive  Negative
-Actual Positive    [TP]      [FN]
-Actual Negative    [FP]      [TN]
+Actual Positive    822       124
+Actual Negative     77       977
 ```
 
-[Insert actual confusion matrix values and interpretation]
+**Interpretation:**
+- **True Positives (822):** Self-promotional sentences correctly identified
+- **True Negatives (977):** Neutral sentences correctly identified  
+- **False Positives (77):** Neutral sentences incorrectly flagged as self-promotional (7.3% FP rate)
+- **False Negatives (124):** Self-promotional sentences missed (13.1% FN rate)
+- **Total Errors:** 201 out of 2,000 test samples (10.1% error rate)
 
 ### 4.3 Keyword Highlighting Evaluation
 
@@ -231,21 +354,33 @@ The context-aware keyword highlighting module was tested on 8 representative sen
 
 | Metric | Score |
 |--------|-------|
-| **Test Accuracy** | 62.5% (5/8 tests) |
-| **Precision** | 100.0% |
-| **Recall** | 60.0% |
-| **F1-Score** | 75.0% |
+| **Test Accuracy** | 87.8% (108/123 tests) |
+| **Precision** | 97.1% |
+| **Recall** | 92.3% |
+| **F1-Score** | 94.6% |
 
 #### Discussion:
 
-The **100% precision** indicates that the system never incorrectly highlights irrelevant words—when a keyword is highlighted, it is always contextually appropriate. The **60% recall** reflects the conservative design of the context validation, which prioritizes avoiding false positives over capturing every possible keyword.
+The **97.1% precision** indicates that the system very rarely incorrectly highlights irrelevant words—when a keyword is highlighted, it is almost always contextually appropriate. The **92.3% recall** shows that the system captures the vast majority of relevant keywords. The **87.8% accuracy** across 123 test cases derived from real Indeed.com resumes demonstrates robust real-world performance.
+
+**Test Categories Evaluated:**
+- **Technical Skills** (20 tests): Hard skills from real CS/IT resumes
+- **Action Verbs** (20 tests): Achievement-oriented verbs in context
+- **Soft Skills** (15 tests): Interpersonal and cognitive abilities
+- **Project Descriptions** (15 tests): Job responsibility statements
+- **Context Filtering** (10 tests): Disambiguation of ambiguous terms
+- **Edge Cases** (43 tests): Challenging scenarios including:
+  - Ambiguous terms (Spring/season vs framework, May/month vs modal)
+  - Version numbers in technology names (Python3.9, TensorFlow 2.x)
+  - Special characters in keywords (C++, C#, .NET, CI/CD)
+  - False positive traps (common words, education context)
+  - Negative contexts (negated skills, future learning intentions)
 
 Notable successes include:
 - Correctly distinguishing "Spring 2022" (date) from "Spring Framework" (technology)
 - Detecting multi-word terms like "Machine Learning"
-- Validating action verbs with proper grammatical context ("Led a team")
-
-The missed cases ("Developed", "Increased") occur because the strict action verb validation requires a direct object in the immediate context. This conservative approach ensures recruiters see only high-confidence highlights.
+- Validating action verbs with proper grammatical context
+- Handling technology names with version numbers and special characters
 
 ### 4.4 Self-Promotion Scoring Evaluation
 
@@ -279,20 +414,28 @@ The end-to-end self-promotion scoring pipeline was evaluated using 10 test sente
 
 | Metric | Score |
 |--------|-------|
-| **Classification Accuracy** | 90.0% (9/10 tests) |
-| **Average HIGH Score** | 0.850 |
-| **Average LOW Score** | 0.160 |
-| **Score Separation** | 0.690 |
+| **Classification Accuracy** | 86.2% |
+| **HIGH Detection Rate** | 90.6% |
+| **LOW Detection Rate** | 81.8% |
+| **Average HIGH Score** | 0.808 |
+| **Average LOW Score** | 0.271 |
+| **Score Separation** | 0.537 |
 
 #### Discussion:
 
-The **90% classification accuracy** demonstrates that the end-to-end pipeline effectively distinguishes between strong, achievement-oriented language and weak, passive descriptions. The **0.690 score separation** between HIGH and LOW categories indicates robust discrimination capability.
+The **86.2% classification accuracy** demonstrates that the end-to-end pipeline effectively distinguishes between strong, achievement-oriented language and weak, passive descriptions. The **0.537 score separation** between HIGH (avg 0.808) and LOW (avg 0.271) categories indicates clear discrimination capability.
+
+**Test Data Source:**
+Self-promotion test cases were derived from real Indeed.com resumes including professionals from:
+- Infosys, Microsoft, TCS, Cisco, Oracle, MongoDB, Red Hat
+- SAP Labs, IBM, HCL Technologies, Accenture, Wipro
+- Various roles: Senior Systems Engineer, Technology Analyst, SAP Consultant, QA Analyst
 
 **Observations:**
 - Sentences with **achievement verbs** (increased, spearheaded, pioneered) consistently score above 0.75
-- Sentences with **metrics** (45%, $500K, 98%) receive maximum scores of 1.000
-- **Passive/vague language** (responsible for, attended, assisted) correctly scores near 0.000
-- The single misclassification ("Worked on various projects" at 0.600) represents a borderline case where the verb "worked" triggered a moderate score despite weak context
+- Sentences with **metrics** (45%, $500K, 98%) receive high scores
+- **Passive/vague language** (responsible for, attended, assisted) correctly scores low
+- HIGH detection rate (90.6%) outperforms LOW detection (81.8%), indicating the model is particularly good at identifying strong self-promotion
 
 The scoring system aligns with résumé writing best practices, rewarding quantifiable achievements and action-oriented language while penalizing passive job descriptions.
 
@@ -364,10 +507,13 @@ The system was built using:
 
 Key findings from evaluation:
 - KNN classifier achieved **89.9% accuracy**, **91.4% precision**, **86.9% recall**, and **89.1% F1-score** on the held-out test set
-- Keyword highlighting achieved **100% precision** with **75% F1-score**, demonstrating conservative but reliable detection
-- End-to-end scoring achieved **90% classification accuracy** with **0.690 score separation** between high and low quality sentences
+- Keyword highlighting achieved **87.8% accuracy**, **97.1% precision**, **92.3% recall**, and **94.6% F1-score** on 123 real-world test cases from Indeed.com resumes
+- End-to-end scoring achieved **86.2% classification accuracy** with **0.537 score separation** between high and low quality sentences
+- HIGH self-promotion detection rate: **90.6%**
+- LOW self-promotion detection rate: **81.8%**
 - Cross-validation demonstrated consistent performance (Mean F1: 0.817 ± 0.121)
-- Context-aware highlighting successfully prevented common false positives
+- Context-aware highlighting successfully prevented common false positives while maintaining high recall
+- Test cases included challenging edge cases: ambiguous terms, version numbers, special characters, and negative contexts
 - Self-promotion scoring aligned with résumé writing best practices
 
 ### 5.2 Conclusions
@@ -384,7 +530,7 @@ Based on the results, the following conclusions are drawn in relation to the res
 
 5. **Meaningful Verification Integrated** – The self-promotion scoring mechanism helps distinguish genuine competency statements from buzzword-heavy or vague language, supporting more authentic résumé writing.
 
-6. **System Tested and Evaluated** – The KNN classifier achieved 89.9% accuracy on 10,000 samples, keyword highlighting achieved 100% precision with 75% F1-score, and end-to-end scoring achieved 90% classification accuracy with strong score separation (0.690) between high and low quality content.
+6. **System Tested and Evaluated** – The KNN classifier achieved 89.9% accuracy on 10,000 samples, keyword highlighting achieved **87.8% accuracy** with **97.1% precision**, **92.3% recall**, and **94.6% F1-score** on 123 real-world test cases from Indeed.com resumes, and end-to-end self-promotion scoring achieved **86.2% classification accuracy** with clear score separation (0.537) between high and low quality content.
 
 **Overall Conclusion:** SkillHighlight provides a viable tool for improving résumé quality and screening efficiency by combining machine learning classification with context-aware keyword detection. The system empowers job seekers to present their skills more effectively while supporting recruiters in identifying qualified candidates.
 

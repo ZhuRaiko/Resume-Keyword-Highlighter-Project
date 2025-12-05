@@ -309,10 +309,17 @@ def highlight_keywords(nlp, text: str, hard_skills: list, soft_skills: list,
             
             if label == 'HARD':
                 if not relax_hard:
-                    ok = any(t.pos_ in ('NOUN', 'PROPN') for t in window) or any(t.dep_ == 'dobj' for t in window)
+                    # Check if it's an acronym (all caps, 2-5 chars) - always accept
+                    is_acronym = any(t.text.isupper() and 2 <= len(t.text) <= 5 for t in window)
+                    # Check if it contains special chars like C++, C#, .NET
+                    has_special = any(c in display_kw for c in ['+', '#', '.'])
+                    # Check for standard technical term patterns
+                    ok = (is_acronym or has_special or 
+                          any(t.pos_ in ('NOUN', 'PROPN', 'X') for t in window) or 
+                          any(t.dep_ in ('dobj', 'pobj', 'attr', 'appos', 'compound') for t in window))
                     if not ok:
                         continue
-                    if not is_valid_context(window, label):
+                    if not is_acronym and not has_special and not is_valid_context(window, label):
                         continue
                 color = '#26a69a'
             
@@ -334,12 +341,30 @@ def highlight_keywords(nlp, text: str, hard_skills: list, soft_skills: list,
             
             elif label == 'ACTION':
                 if not relax_action:
-                    has_verb_obj = False
+                    is_valid_action = False
                     for t in window:
-                        if t.pos_ == 'VERB' and any(c.dep_ == 'dobj' for c in t.children):
-                            has_verb_obj = True
-                            break
-                    if not has_verb_obj:
+                        if t.pos_ == 'VERB':
+                            # Accept verbs with direct objects (dobj)
+                            if any(c.dep_ == 'dobj' for c in t.children):
+                                is_valid_action = True
+                                break
+                            # Accept verbs with prepositional objects (pobj via prep)
+                            if any(c.dep_ in ('prep', 'agent') for c in t.children):
+                                is_valid_action = True
+                                break
+                            # Accept ROOT verbs (main verb of sentence)
+                            if t.dep_ == 'ROOT':
+                                is_valid_action = True
+                                break
+                            # Accept sentence-initial verbs (common in resume bullets)
+                            if t.i == 0 or (t.i > 0 and t.doc[t.i-1].text in ('•', '-', '*', '·', '►', '●')):
+                                is_valid_action = True
+                                break
+                            # Accept conjoined verbs (e.g., "developed and deployed")
+                            if t.dep_ in ('conj', 'xcomp', 'ccomp', 'advcl'):
+                                is_valid_action = True
+                                break
+                    if not is_valid_action:
                         continue
                 color = '#ef5350'
             

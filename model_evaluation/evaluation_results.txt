@@ -1,0 +1,89 @@
+﻿python : 2025-12-06 00:02:18.239 WARNING 
+streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing 
+ScriptRunContext! This warning can be ignored when running in bare mode.
+At line:1 char:98
++ ... roject\model_evaluation"; python evaluate_full_system.py 2>&1 | Out-F ...
++                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (2025-12-06 00:0...g in bare mode.:String) [], R 
+   emoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+2025-12-06 00:02:18.252 
+  [33m[1mWarning:[0m to view this Streamlit app on a browser, run it with the following
+  command:
+
+    streamlit run evaluate_full_system.py [ARGUMENTS]
+2025-12-06 00:02:18.252 Thread 'MainThread': missing ScriptRunContext! This warning can be 
+ignored when running in bare mode.
+2025-12-06 00:02:18.252 Thread 'MainThread': missing ScriptRunContext! This warning can be 
+ignored when running in bare mode.
+2025-12-06 00:02:18.252 Thread 'MainThread': missing ScriptRunContext! This warning can be 
+ignored when running in bare mode.
+2025-12-06 00:02:18.756 Thread 'Thread-1': missing ScriptRunContext! This warning can be 
+ignored when running in bare mode.
+2025-12-06 00:02:18.756 Thread 'Thread-1': missing ScriptRunContext! This warning can be 
+ignored when running in bare mode.
+2025-12-06 00:02:18.756 Thread 'Thread-1': missing ScriptRunContext! This warning can be 
+ignored when running in bare mode.
+2025-12-06 00:02:21.529 Thread 'MainThread': missing ScriptRunContext! This warning can be 
+ignored when running in bare mode.
+2025-12-06 00:02:21.529 Thread 'MainThread': missing ScriptRunContext! This warning can be 
+ignored when running in bare mode.
+2025-12-06 00:02:21.529 Thread 'MainThread': missing ScriptRunContext! This warning can be 
+ignored when running in bare mode.
+======================================================================
+SKILLHIGHLIGHT SYSTEM EVALUATION
+Date: 2025-12-06 00:02:17
+======================================================================
+
+[1/4] Loading models...
+[2/4] Loading keyword database...
+    - Hard Skills: 735
+    - Soft Skills: 775
+    - Recruiter Keywords: 533
+    - Action Verbs: 856
+[3/4] Preparing test cases...
+[4/4] Ready to evaluate.
+
+
+======================================================================
+COMPONENT 1: TEXT EXTRACTION
+======================================================================
+Purpose: Evaluate PDF/DOCX to text conversion accuracy
+----------------------------------------------------------------------
+
+Test Files: 4
+----------------------------------------------------------------------
+
+  File: Computer Science (Sample CV).docx
+Traceback (most recent call last):
+  File "C:\Users\Evance Adriano\Desktop\School\Resume Keyword Highlighter 
+Project\model_evaluation\evaluate_full_system.py", line 163, in evaluate_text_extraction
+    print(f"    \u2713 Words: {word_count} | Lines: {line_count} | Sections: 
+{sections_found}/3")
+  File "C:\Users\Evance 
+Adriano\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2713' in position 4: character 
+maps to <undefined>
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Evance Adriano\Desktop\School\Resume Keyword Highlighter 
+Project\model_evaluation\evaluate_full_system.py", line 1788, in <module>
+    main()
+  File "C:\Users\Evance Adriano\Desktop\School\Resume Keyword Highlighter 
+Project\model_evaluation\evaluate_full_system.py", line 1708, in main
+    all_results["extraction"] = evaluate_text_extraction()
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Evance Adriano\Desktop\School\Resume Keyword Highlighter 
+Project\model_evaluation\evaluate_full_system.py", line 176, in evaluate_text_extraction
+    print(f"    \u2717 Error: {str(e)[:60]}")
+  File "C:\Users\Evance 
+Adriano\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2717' in position 4: character 
+maps to <undefined>

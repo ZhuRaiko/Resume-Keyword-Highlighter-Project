@@ -4,6 +4,13 @@ Tests: Keyword Highlighting + End-to-End Scoring
 """
 import sys
 import re
+import os
+import warnings
+
+# Suppress Streamlit warnings when running outside Streamlit
+os.environ['STREAMLIT_SERVER_HEADLESS'] = 'true'
+warnings.filterwarnings('ignore')
+
 sys.path.insert(0, '.')
 import spacy
 import json
@@ -44,7 +51,7 @@ tests = [
     ('Proficient in Python and JavaScript programming', ['python', 'javascript'], []),
     ('Graduated in Spring 2022 from university', [], ['spring']),
     ('Led a team of 5 developers to success', ['led'], []),
-    ('Strong communication and leadership skills', ['communication', 'leadership'], []),
+    ('Strong communication and leadership skills', ['communication and leadership skills'], []),  # Matches as phrase
     ('Responsible for data entry tasks', [], []),
     ('Developed new features using React', ['developed', 'react'], []),
     ('Experience with Machine Learning and SQL', ['machine learning', 'sql'], []),

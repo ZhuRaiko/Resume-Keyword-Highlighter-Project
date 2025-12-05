@@ -1,0 +1,24 @@
+{
+  "evaluation_date": "2025-12-06T00:07:55.467660",
+  "extraction": {
+    "status": "COMPLETED",
+    "success_rate": 100.0,
+    "files_tested": 4
+  },
+  "highlighting": {
+    "accuracy": 87.8048780487805,
+    "precision": 0.9705882352941176,
+    "recall": 0.9230769230769231,
+    "f1_score": 0.946236559139785,
+    "tests_passed": 108,
+    "total_tests": 123
+  },
+  "scoring": {
+    "accuracy": 86.15384615384616,
+    "high_accuracy": 90.625,
+    "low_accuracy": 81.81818181818183,
+    "avg_high_score": 0.8078125,
+    "avg_low_score": 0.27121212121212124,
+    "score_separation": 0.5366003787878788
+  }
+}

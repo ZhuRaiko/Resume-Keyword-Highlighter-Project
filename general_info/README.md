@@ -31,7 +31,7 @@ An intelligent resume analysis tool that highlights keywords, assesses self-prom
 
 Our self-promotion classifier achieves strong performance using a K-Nearest Neighbors approach with BERT embeddings:
 
-### Test Set Performance (80/20 Split)
+### KNN Classifier Performance (80/20 Split)
 
 | Metric | Score |
 |--------|-------|
@@ -39,6 +39,24 @@ Our self-promotion classifier achieves strong performance using a K-Nearest Neig
 | **Precision** | 91.4% |
 | **Recall** | 86.9% |
 | **F1-Score** | 89.1% |
+
+### Keyword Highlighting Performance (123 Test Cases)
+
+| Metric | Score |
+|--------|-------|
+| **Accuracy** | 87.8% |
+| **Precision** | 97.1% |
+| **Recall** | 92.3% |
+| **F1-Score** | 94.6% |
+
+### End-to-End Scoring Performance (65 Test Sentences)
+
+| Metric | Score |
+|--------|-------|
+| **Classification Accuracy** | 86.2% |
+| **HIGH Detection** | 90.6% |
+| **LOW Detection** | 81.8% |
+| **Score Separation** | 0.537 |
 
 ### Cross-Validation Results (5-Fold)
 
