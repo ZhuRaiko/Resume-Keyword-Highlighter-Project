@@ -55,6 +55,269 @@ knn_model = load_or_train_knn(
     csv_path=str(Path(__file__).parent.parent / "data" / "self_promotion_dataset.csv")
 )
 
+# -----------------------------------------------------------------------------
+# KNN training / evaluation diagnostics (learning curve, validation curve, test CM)
+# These plots help produce figures for the thesis: learning behavior and k selection
+# -----------------------------------------------------------------------------
+try:
+    import pandas as pd
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from sklearn.model_selection import train_test_split, learning_curve, validation_curve
+    from sklearn.metrics import ConfusionMatrixDisplay, accuracy_score
+    from sklearn.neighbors import KNeighborsClassifier
+    import traceback
+
+    data_path = Path(__file__).parent.parent / "data" / "self_promotion_dataset.csv"
+    if data_path.exists():
+        # Read CSV with robust encoding fallback to handle smart quotes and Windows encodings
+        df = None
+        enc_used = None
+        try:
+            df = pd.read_csv(data_path, encoding='utf-8')
+            enc_used = 'utf-8'
+        except UnicodeDecodeError:
+            try:
+                df = pd.read_csv(data_path, encoding='cp1252')
+                enc_used = 'cp1252'
+            except Exception:
+                # Last resort: latin-1 will never fail on decoding
+                df = pd.read_csv(data_path, encoding='latin-1')
+                enc_used = 'latin-1'
+        except Exception:
+            # other pandas parse errors - try python engine as fallback
+            try:
+                df = pd.read_csv(data_path, engine='python')
+                enc_used = 'python-engine-default'
+            except Exception:
+                raise
+        if enc_used:
+            print(f"[KNN PLOT] Read dataset using encoding: {enc_used}")
+        # Normalize column names in case of trailing comma or whitespace
+        df.columns = [c.strip() for c in df.columns]
+
+        if not df.empty and "sentence" in df.columns and "label" in df.columns:
+            sentences = df["sentence"].astype(str).tolist()
+            labels = pd.to_numeric(df["label"], errors='coerce').fillna(0).astype(int).values
+
+            # Encode sentences (use already-loaded bert_model)
+            try:
+                X = bert_model.encode(sentences)
+            except Exception:
+                from models.embedder import encode_sentences
+                X = encode_sentences(sentences, model=bert_model)
+
+            # -----------------------------
+            # Embedding visualizations
+            # - PCA on full set (fast)
+            # - UMAP on balanced subsample (preferred)
+            # - Fallback to t-SNE if umap isn't available
+            # -----------------------------
+            try:
+                from sklearn.decomposition import PCA
+                from sklearn.manifold import TSNE
+                try:
+                    import umap
+                    have_umap = True
+                except Exception:
+                    have_umap = False
+
+                def balanced_subsample(y, n=2000, seed=42):
+                    import numpy as _np
+                    rng = _np.random.RandomState(seed)
+                    labels = _np.unique(y)
+                    per_label = max(1, n // len(labels))
+                    indices = []
+                    for lbl in labels:
+                        idxs = _np.where(y == lbl)[0]
+                        if idxs.size == 0:
+                            continue
+                        rng.shuffle(idxs)
+                        take = idxs[:per_label]
+                        indices.extend(take.tolist())
+                    # If we have fewer than n, just return what we have
+                    return _np.array(indices[:n])
+
+                # PCA on full set
+                try:
+                    pca = PCA(n_components=2, random_state=42)
+                    Zp = pca.fit_transform(X)
+                    plt.figure(figsize=(7, 5))
+                    plt.scatter(Zp[:, 0], Zp[:, 1], c=labels, cmap='coolwarm', s=6, alpha=0.8)
+                    plt.title('BERT Embeddings PCA (2D)')
+                    plt.xticks([]); plt.yticks([])
+                    plt.tight_layout()
+                    pca_path = Path(__file__).parent / 'bert_pca.png'
+                    plt.savefig(pca_path, dpi=150)
+                    plt.close()
+                    print(f"[EMBED PLOT] Saved PCA: {pca_path}")
+                except Exception:
+                    print("[EMBED PLOT] PCA plotting failed, continuing.")
+
+                # Prepare subsample for UMAP/TSNE
+                try:
+                    subsz = min(2000, X.shape[0])
+                    subs_idx = balanced_subsample(labels, n=subsz)
+                    X_vis = X[subs_idx]
+                    y_vis = labels[subs_idx]
+
+                    if have_umap:
+                        reducer = umap.UMAP(n_components=2, random_state=42)
+                        Zu = reducer.fit_transform(X_vis)
+                        plt.figure(figsize=(7, 5))
+                        plt.scatter(Zu[:, 0], Zu[:, 1], c=y_vis, cmap='coolwarm', s=8, alpha=0.9)
+                        plt.title('BERT Embeddings UMAP (subsample)')
+                        plt.xticks([]); plt.yticks([])
+                        plt.tight_layout()
+                        umap_path = Path(__file__).parent / 'bert_umap.png'
+                        plt.savefig(umap_path, dpi=150)
+                        plt.close()
+                        print(f"[EMBED PLOT] Saved UMAP: {umap_path}")
+                    else:
+                        # Fallback to t-SNE (slower)
+                        tsne = TSNE(n_components=2, random_state=42, init='pca', learning_rate='auto')
+                        Zt = tsne.fit_transform(X_vis)
+                        plt.figure(figsize=(7, 5))
+                        plt.scatter(Zt[:, 0], Zt[:, 1], c=y_vis, cmap='coolwarm', s=8, alpha=0.9)
+                        plt.title('BERT Embeddings t-SNE (subsample)')
+                        plt.xticks([]); plt.yticks([])
+                        plt.tight_layout()
+                        tsne_path = Path(__file__).parent / 'bert_tsne.png'
+                        plt.savefig(tsne_path, dpi=150)
+                        plt.close()
+                        print(f"[EMBED PLOT] Saved t-SNE: {tsne_path}")
+                except Exception:
+                    print("[EMBED PLOT] UMAP/t-SNE plotting failed, continuing.")
+            except Exception:
+                print("[EMBED PLOT] Required sklearn/umap packages not available; skipping embedding plots.")
+
+            # Train / test split for final evaluation (preserve original indices)
+            indices = np.arange(len(X))
+            train_idx, test_idx = train_test_split(indices, test_size=0.2, random_state=42, stratify=labels)
+            X_train, X_test = X[train_idx], X[test_idx]
+            y_train, y_test = labels[train_idx], labels[test_idx]
+
+            # Learning curve (uses a fresh KNN estimator)
+            knn_for_viz = KNeighborsClassifier(n_neighbors=5)
+            # Use n_jobs=1 to avoid parallel backend issues on some Windows setups
+            train_sizes, train_scores, valid_scores = learning_curve(
+                knn_for_viz, X_train, y_train, cv=5, scoring='accuracy', n_jobs=1,
+                train_sizes=np.linspace(0.1, 1.0, 5)
+            )
+
+            train_scores_mean = np.mean(train_scores, axis=1)
+            valid_scores_mean = np.mean(valid_scores, axis=1)
+
+            plt.figure(figsize=(7, 4))
+            plt.plot(train_sizes, train_scores_mean, 'o-', color='#4caf50', label='Train')
+            plt.plot(train_sizes, valid_scores_mean, 'o-', color='#2196f3', label='Validation')
+            plt.xlabel('Training examples')
+            plt.ylabel('Accuracy')
+            plt.title('KNN Learning Curve')
+            plt.legend(loc='best')
+            plt.grid(alpha=0.3)
+            plt.tight_layout()
+            lc_path = Path(__file__).parent / 'knn_learning_curve.png'
+            plt.savefig(lc_path)
+            plt.close()
+            print(f"[KNN PLOT] Saved learning curve: {lc_path}")
+
+            # Validation curve over k
+            param_range = [1, 3, 5, 7, 9, 11]
+            train_scores_v, test_scores_v = validation_curve(
+                KNeighborsClassifier(), X_train, y_train, param_name='n_neighbors',
+                param_range=param_range, cv=5, scoring='accuracy', n_jobs=1
+            )
+            train_mean_v = np.mean(train_scores_v, axis=1)
+            test_mean_v = np.mean(test_scores_v, axis=1)
+
+            plt.figure(figsize=(7, 4))
+            plt.plot(param_range, train_mean_v, marker='o', color='#4caf50', label='Train')
+            plt.plot(param_range, test_mean_v, marker='o', color='#2196f3', label='CV')
+            plt.xlabel('n_neighbors (k)')
+            plt.ylabel('Accuracy')
+            plt.title('KNN Validation Curve (k)')
+            plt.legend()
+            plt.grid(alpha=0.3)
+            plt.tight_layout()
+            kv_path = Path(__file__).parent / 'knn_k_validation.png'
+            plt.savefig(kv_path)
+            plt.close()
+            print(f"[KNN PLOT] Saved validation curve: {kv_path}")
+
+            # Final test confusion matrix: train a fresh KNN on X_train
+            knn_final = KNeighborsClassifier(n_neighbors=5)
+            knn_final.fit(X_train, y_train)
+            y_pred = knn_final.predict(X_test)
+
+            cm_path = Path(__file__).parent / 'knn_test_confusion_matrix.png'
+            ConfusionMatrixDisplay.from_predictions(y_test, y_pred, display_labels=['Non-Promo', 'Promo'], cmap='Blues')
+            plt.title('KNN Test Confusion Matrix')
+            plt.tight_layout()
+            plt.savefig(cm_path)
+            plt.close()
+            print(f"[KNN PLOT] Saved test confusion matrix: {cm_path}")
+
+            # Nearest-neighbor qualitative examples (show query -> nearest train neighbors)
+            try:
+                # choose up to 3 positives and 3 negatives from test set
+                import random
+                pos_globals = [idx for idx, lab in zip(test_idx, y_test) if lab == 1]
+                neg_globals = [idx for idx, lab in zip(test_idx, y_test) if lab == 0]
+                examples = []
+                random.seed(42)
+                for pool in (pos_globals, neg_globals):
+                    if pool:
+                        take = min(3, len(pool))
+                        picks = random.sample(pool, take)
+                        examples.extend(picks)
+
+                rows = []
+                for gidx in examples:
+                    vec = X[gidx].reshape(1, -1)
+                    nbrs = knn_final.kneighbors(vec, n_neighbors=3, return_distance=False)[0]
+                    # map neighbor indices (into X_train) to global indices
+                    nbr_globals = train_idx[nbrs]
+                    neighbor_texts = [sentences[i] for i in nbr_globals]
+                    rows.append((sentences[gidx], labels[gidx], neighbor_texts))
+
+                # Render as a simple text PNG
+                import matplotlib.pyplot as plt
+                plt.figure(figsize=(10, 2 + len(rows) * 1.2))
+                y = 1.0
+                for qtext, lab, ntexts in rows:
+                    plt.text(0.01, y, f"Query (label={lab}): {qtext}", fontsize=9, wrap=True)
+                    y -= 0.18
+                    for ni, nt in enumerate(ntexts, 1):
+                        plt.text(0.03, y, f"  NN{ni}: {nt}", fontsize=8, color='gray', wrap=True)
+                        y -= 0.14
+                    y -= 0.04
+                plt.axis('off')
+                nn_path = Path(__file__).parent / 'knn_nearest_neighbors.png'
+                plt.tight_layout()
+                plt.savefig(nn_path, dpi=150)
+                plt.close()
+                print(f"[KNN PLOT] Saved nearest-neighbor examples: {nn_path}")
+            except Exception:
+                print("[KNN PLOT] Nearest-neighbor examples generation failed.")
+        else:
+            print("[KNN PLOT] Dataset found but missing required columns 'sentence' and 'label'.")
+    else:
+        print(f"[KNN PLOT] Dataset not found at: {data_path}")
+except Exception as e:
+    # Surface exceptions to console and write a log for post-mortem
+    try:
+        import traceback
+        log_path = Path(__file__).parent / 'knn_plot_error.log'
+        with open(log_path, 'w', encoding='utf-8') as logf:
+            logf.write(f"Exception during KNN plotting: {str(e)}\n\n")
+            traceback.print_exc(file=logf)
+        print(f"[KNN PLOT] Exception occurred. See: {log_path}")
+    except Exception:
+        # If logging fails, at least print the traceback
+        print("[KNN PLOT] Exception occurred while attempting to log error:")
+        traceback.print_exc()
+    
 print("[2/4] Loading keyword database...")
 with open(Path(__file__).parent.parent / "data" / "keywords.json", "r") as f:
     keywords_data = json.load(f)
@@ -186,6 +449,21 @@ def evaluate_text_extraction():
     print(f"  Success Rate: {success_rate:.1f}% ({success_count}/{len(results)})")
     print(f"  Avg Words Extracted: {avg_words:.0f}")
     
+    # Plot success rate bar
+    try:
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(4, 3))
+        plt.bar(['Success', 'Failure'], [success_count, len(results) - success_count], color=['#4caf50', '#f44336'])
+        plt.ylabel('Files')
+        plt.title('Text Extraction Success Count')
+        plt.tight_layout()
+        ex_path = Path(__file__).parent / 'extraction_success_rate.png'
+        plt.savefig(ex_path, dpi=150)
+        plt.close()
+        print(f"[EXTRACTION PLOT] Saved: {ex_path}")
+    except Exception:
+        print("[EXTRACTION PLOT] Failed to save extraction plot")
+
     return {
         "status": "COMPLETED",
         "success_rate": success_rate,
@@ -1209,7 +1487,46 @@ def evaluate_keyword_highlighting():
     print(f"  Precision:        {precision:.1%}")
     print(f"  Recall:           {recall:.1%}")
     print(f"  F1-Score:         {f1:.1%}")
-    
+
+    # Plotting: confusion/metrics for highlighting
+    try:
+        import matplotlib.pyplot as plt
+        import numpy as np
+
+        # Simple confusion-like matrix using collected counts
+        # Rows: Actual (Positive keywords present, Negative)
+        # Cols: Predicted (Detected, Not detected)
+        # We don't have TN easily; place 0 as placeholder for clarity
+        cm = np.array([[true_positives, false_negatives], [false_positives, 0]])
+        fig, ax = plt.subplots(figsize=(5, 4))
+        im = ax.imshow(cm, cmap='Blues')
+        for (i, j), val in np.ndenumerate(cm):
+            ax.text(j, i, int(val), ha='center', va='center', color='white' if val > cm.max()/2 else 'black')
+        ax.set_xticks([0, 1]); ax.set_xticklabels(['Predicted Detected', 'Predicted Not Detected'])
+        ax.set_yticks([0, 1]); ax.set_yticklabels(['Actual Keywords', 'Actual Non-Keywords'])
+        plt.title('Keyword Highlighting - Counts')
+        plt.tight_layout()
+        cm_path = Path(__file__).parent / 'keyword_highlighting_confusion_matrix.png'
+        plt.savefig(cm_path, dpi=150)
+        plt.close()
+
+        # Metrics bar chart
+        metric_names = ['Precision', 'Recall', 'F1']
+        metric_vals = [precision, recall, f1]
+        plt.figure(figsize=(6, 4))
+        bars = plt.bar(metric_names, metric_vals, color=['#4caf50', '#2196f3', '#ff9800'])
+        plt.ylim(0, 1.0)
+        for i, v in enumerate(metric_vals):
+            plt.text(i, v + 0.02, f"{v:.2f}", ha='center', fontweight='bold')
+        plt.title('Keyword Highlighting Metrics')
+        plt.tight_layout()
+        metrics_path = Path(__file__).parent / 'keyword_highlighting_metrics.png'
+        plt.savefig(metrics_path, dpi=150)
+        plt.close()
+        print(f"[HIGHLIGHT PLOT] Saved: {cm_path}, {metrics_path}")
+    except Exception:
+        print("[HIGHLIGHT PLOT] Plotting failed; continuing.")
+
     return {
         "status": "COMPLETED",
         "accuracy": accuracy,
@@ -1665,6 +1982,97 @@ def evaluate_self_promotion_scoring():
     # Score distribution analysis
     high_correct = sum(1 for r in results if r["expected"] == "HIGH" and r["correct"])
     low_correct = sum(1 for r in results if r["expected"] == "LOW" and r["correct"])
+    
+    # Confusion matrix and performance graph for self-promotion scoring
+    try:
+        import matplotlib.pyplot as plt
+        import numpy as np
+        from sklearn.metrics import ConfusionMatrixDisplay
+
+        # Also plot ROC and Precision-Recall on the small test set used in this function
+        try:
+            from sklearn.metrics import roc_curve, auc, precision_recall_curve, average_precision_score
+            y_true = [1 if r['expected'] == 'HIGH' else 0 for r in results if r['expected'] in ('HIGH', 'LOW')]
+            y_score = [r['score'] for r in results if r['expected'] in ('HIGH', 'LOW')]
+            if len(set(y_true)) > 1:
+                # ROC
+                fpr, tpr, _ = roc_curve(y_true, y_score)
+                roc_auc = auc(fpr, tpr)
+                plt.figure(figsize=(6, 5))
+                plt.plot(fpr, tpr, color='#2196f3', lw=2, label=f'AUC = {roc_auc:.2f}')
+                plt.plot([0, 1], [0, 1], color='gray', linestyle='--')
+                plt.xlabel('False Positive Rate')
+                plt.ylabel('True Positive Rate')
+                plt.title('Self-Promotion ROC Curve')
+                plt.legend(loc='lower right')
+                roc_path = Path(__file__).parent / 'self_promotion_roc.png'
+                plt.tight_layout()
+                plt.savefig(roc_path, dpi=150)
+                plt.close()
+                print(f"[SCORE PLOT] Saved ROC: {roc_path}")
+
+                # Precision-Recall
+                precision_vals, recall_vals, _ = precision_recall_curve(y_true, y_score)
+                ap = average_precision_score(y_true, y_score)
+                plt.figure(figsize=(6, 5))
+                plt.plot(recall_vals, precision_vals, color='#4caf50', lw=2, label=f'AP = {ap:.2f}')
+                plt.xlabel('Recall')
+                plt.ylabel('Precision')
+                plt.title('Self-Promotion Precision-Recall Curve')
+                plt.legend(loc='lower left')
+                pr_path = Path(__file__).parent / 'self_promotion_pr.png'
+                plt.tight_layout()
+                plt.savefig(pr_path, dpi=150)
+                plt.close()
+                print(f"[SCORE PLOT] Saved PR: {pr_path}")
+
+            # Score distribution histogram
+            try:
+                plt.figure(figsize=(6, 4))
+                plt.hist([r['score'] for r in results if r['expected'] == 'HIGH'], bins=15, alpha=0.7, label='HIGH', color='#2196f3')
+                plt.hist([r['score'] for r in results if r['expected'] == 'LOW'], bins=15, alpha=0.7, label='LOW', color='#ff9800')
+                plt.xlabel('Self-Promotion Score')
+                plt.ylabel('Count')
+                plt.title('Score Distribution by True Label')
+                plt.legend()
+                hist_path = Path(__file__).parent / 'self_promotion_score_hist.png'
+                plt.tight_layout()
+                plt.savefig(hist_path, dpi=150)
+                plt.close()
+                print(f"[SCORE PLOT] Saved score histogram: {hist_path}")
+            except Exception:
+                print("[SCORE PLOT] Histogram failed")
+        except Exception:
+            print("[SCORE PLOT] sklearn.metrics not available for ROC/PR; skipping.")
+
+        high_total = len(high_scores)
+        low_total = len(low_scores)
+        high_incorrect = high_total - high_correct if high_total else 0
+        low_incorrect = low_total - low_correct if low_total else 0
+
+        cm = np.array([[high_correct, high_incorrect], [low_correct, low_incorrect]])
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["HIGH", "LOW"])
+        fig, ax = plt.subplots(figsize=(5, 4))
+        disp.plot(ax=ax, cmap="Blues")
+        plt.title("Self-Promotion Scoring Confusion Matrix")
+        plt.tight_layout()
+        plt.savefig("model_evaluation/self_promotion_confusion_matrix.png")
+        plt.close(fig)
+
+        metrics = [accuracy/100, high_correct/high_total if high_total else 0, low_correct/low_total if low_total else 0, separation]
+        metric_names = ["Accuracy", "HIGH Det.", "LOW Det.", "Separation"]
+        plt.figure(figsize=(6, 4))
+        plt.bar(metric_names, metrics, color=["#4caf50", "#2196f3", "#ff9800", "#e91e63"])
+        plt.ylim(0, 1.05)
+        plt.title("Self-Promotion Scoring Metrics")
+        for i, v in enumerate(metrics):
+            plt.text(i, v + 0.02, f"{v:.2f}", ha='center', fontweight='bold')
+        plt.tight_layout()
+        plt.savefig("model_evaluation/self_promotion_metrics.png")
+        plt.close()
+    except Exception:
+        # If plotting fails, continue without crashing evaluation
+        pass
     
     print("\n" + "-" * 70)
     print("SCORING RESULTS:")

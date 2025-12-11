@@ -2,7 +2,7 @@
 
 ---
 
-## CHAPTER 3: METHODOLOGY
+## CHAPTER 3: TECHNICAL BACKGROUND
 
 ### 3.1 Research Design
 
@@ -270,7 +270,16 @@ Additional validation:
 
 ---
 
-## CHAPTER 4: RESULTS AND DISCUSSION
+### 3.9 Figures and placement (Chapter 3)
+
+- **Embedding visualizations (place after `3.5 Tools and Technologies`):**
+  - `model_evaluation/bert_pca.png` — PCA projection of sentence embeddings. Insert as a full-width figure to illustrate global variance structure.
+  - `model_evaluation/bert_umap.png` (or `model_evaluation/bert_tsne.png` fallback) — UMAP/t‑SNE visualization showing local neighborhood structure; place beside or below the PCA figure with a short caption explaining local vs global structure.
+
+  Suggested in‑text sentence: "Figure X shows the low‑dimensional projection of sentence embeddings (PCA) and the UMAP visualization, demonstrating semantic clustering that motivates nearest‑neighbour retrieval."
+
+
+## CHAPTER 4: DESIGN AND METHODOLOGY
 
 ### 4.1 System Implementation
 
@@ -493,7 +502,18 @@ Informal testing was conducted using sample résumés in various formats:
 
 ---
 
-## CHAPTER 5: SUMMARY, CONCLUSIONS, AND RECOMMENDATIONS
+### 4.6 Figures and placement (Chapter 4)
+
+- **Model selection & training (place in Design/Methodology, near `4.2 Model Performance`):**
+  - `model_evaluation/knn_learning_curve.png` — Learning curve showing training and cross‑validation performance vs training set size. Use when describing data sufficiency and learning behavior.
+  - `model_evaluation/knn_validation_curve.png` — Validation curve for the number of neighbors (`k`). Place next to hyperparameter selection text.
+  - `model_evaluation/knn_nearest_neighbors.png` — Qualitative nearest‑neighbour examples. Place as a boxed example in the methodology section showing query sentences and retrieved neighbors.
+  - `model_evaluation/extraction_success_rate.png` — Bar chart of extraction success rates per field/category. Place in the extraction/module evaluation subsection.
+
+  Suggested in‑text sentence: "Figures X–Y summarize the procedures used for hyperparameter tuning and qualitative inspection of retrieved neighbors during development."
+
+
+## CHAPTER 5: RESULTS AND DISCUSSION
 
 ### 5.1 Summary
 
@@ -575,6 +595,21 @@ Based on the results, the following conclusions are drawn in relation to the res
 2. **Offer Tool Access** – Make systems like SkillHighlight available to students before graduation to improve job application outcomes.
 
 ---
+
+### 5.4 Figures and placement (Chapter 5 — Results & Discussion)
+
+- **Quantitative results (place in Results & Discussion):**
+  - `model_evaluation/knn_confusion_matrix.png` — Confusion matrix for the KNN classifier on the test set. Place alongside Table 4.1 and the confusion matrix analysis paragraph.
+  - `model_evaluation/self_promotion_metrics.png` — Summary metrics (accuracy, precision, recall, F1) for self‑promotion classification. Place near the top of the Results section as a summary figure.
+  - `model_evaluation/self_promotion_confusion_matrix.png` — Confusion matrix for self‑promotion classes (HIGH/MID/LOW). Use when discussing class‑specific errors.
+  - `model_evaluation/self_promotion_roc.png` — ROC curve with AUC; include when discussing discrimination ability and threshold choice.
+  - `model_evaluation/self_promotion_pr.png` — Precision‑Recall curve; include when discussing performance under class imbalance.
+  - `model_evaluation/self_promotion_score_hist.png` — Histogram of scores showing distribution and thresholds; include when justifying threshold choices for HIGH/MID/LOW.
+  - `model_evaluation/keyword_highlighting_metrics.png` — Highlighting metrics per category; place in the keyword evaluation subsection.
+  - `model_evaluation/keyword_highlighting_confusion_matrix.png` — Confusion matrix for keyword category assignments; include with error analysis.
+
+  Suggested in‑text sentence: "Figures X–Z present the quantitative evaluation of the system: classifier performance (confusion matrices, ROC/PR), score distribution, and keyword highlighting metrics used to drive the discussion and conclusions in this chapter."
+
 
 ## REFERENCES
 

@@ -64,7 +64,7 @@ def evaluate_knn_model(show_examples=True, n_examples=5):
     df = df[df['sentence'].str.strip() != '']  # Remove empty sentences
     
     if len(df) < initial_size:
-        print(f"⚠️  Removed {initial_size - len(df)} rows with missing/empty data")
+        print(f"WARNING: Removed {initial_size - len(df)} rows with missing/empty data")
     
     print(f"Dataset size: {len(df)} samples")
     print(f"Class distribution:\n{df['label'].value_counts()}")
