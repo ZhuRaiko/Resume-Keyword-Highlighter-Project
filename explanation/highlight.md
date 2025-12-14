@@ -1,4 +1,25 @@
-
+################################################################################
+# Module: highlight.py
+#
+# What this module does:
+#   Provides context-aware keyword highlighting for resume text. It locates
+#   hard skills, soft skills, recruiter keywords, and action verbs within input
+#   text, validates the linguistic context of each match to reduce false
+#   positives, and renders highlighted HTML spans for display.
+#
+# Why this module is necessary in the overall system:
+#   The UI needs accurate, context-aware highlights to surface candidate skills
+#   and actions without flagging irrelevant tokens (e.g., dates, adjectives,
+#   or parts of email addresses). This module centralizes that logic and returns
+#   the final HTML used by the front-end or other display components.
+#
+# How this module connects to other parts of the NLP/ML pipeline:
+#   - Accepts a spaCy `nlp` pipeline for tokenization and sentence segmentation.
+#   - Uses sentiment (TextBlob) on sentence-level contexts to help filter soft
+#     skill matches under negative contexts.
+#   - Exposes `highlight_keywords()` which the main app calls after text
+#     extraction to produce HTML for display and further analysis.
+################################################################################
 """
 Keyword highlighting with context validation for resume parsing.
 
@@ -14,6 +35,20 @@ import re
 from textblob import TextBlob
 
 
+# Function: highlight_keywords
+# What: Identify and HTML-highlight keywords (hard/soft/recruiter/action) in a resume text.
+# Why: Provide a context-validated, styled HTML output for UI highlighting and downstream review.
+# Inputs:
+#   - nlp: spaCy language model used to parse the text into tokens/sentences.
+#   - text (str): Input resume text to process.
+#   - hard_skills, soft_skills, recruiter_keywords, action_verbs (list): Keyword lists.
+#   - disabled_labels (optional set): Labels to skip highlighting.
+#   - token_aligned (bool): If True, trims matches to token boundaries where appropriate.
+#   - relax_hard/relax_action/relax_soft/relax_recruiter (bool): Relax context checks per category.
+#   - soft_neg_threshold (float): Sentiment polarity cutoff to skip soft matches.
+#   - render_legacy (bool): Use legacy HTML style if True.
+# Returns: str containing HTML with highlighted spans.
+# How it contributes: Central UI helper that ensures only contextually-valid keywords are highlighted.
 def highlight_keywords(
     nlp,
     text: str,
@@ -205,6 +240,10 @@ def highlight_keywords(
 
     # Detect skill enumerations
     def find_skill_enumerations():
+        """
+        Find spans that represent enumerated skill lists near words like 'skills' or 'expertise'.
+        Returns a list of (start_token_idx, end_token_idx) spans covering enumerations.
+        """
         enum_spans = []
         for sent in sents:
             sent_tokens = [t for t in sent if t.i < n]

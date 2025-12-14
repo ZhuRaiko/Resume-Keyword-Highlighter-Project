@@ -31,7 +31,7 @@ def load_or_train_knn(model_path="knn_model.pkl", csv_path="self_promotion_datas
     Load existing KNN model or train new one from dataset.
     
     This function implements the core academic methodology:
-    1. Load labeled dataset (6,752 sentences)
+    1. Load labeled dataset (10,000 sentences)
     2. Generate BERT embeddings for all sentences
     3. Train KNN classifier (k=5)
     4. Cache model for future use

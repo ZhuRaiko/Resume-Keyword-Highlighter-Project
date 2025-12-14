@@ -1,3 +1,27 @@
+################################################################################
+# Module: scoring.py
+#
+# What this module does:
+#   Implements sentence-level self-promotion scoring for résumé text. It provides
+#   utilities to load or train a KNN classifier (using BERT embeddings), split
+#   résumé text into sentences robustly across file formats, compute an ML-based
+#   base score per sentence, and combine that with rule-based heuristics
+#   (metrics, achievement patterns, bullets, sentiment, action verbs) to produce
+#   a final per-sentence score and an average score for a document.
+#
+# Why this module is necessary in the overall system:
+#   The larger system needs a deterministic way to quantify "self-promotion"
+#   signals in resume text. This module centralizes that logic so the main app
+#   can request per-sentence scores (and an aggregate) for ranking, highlighting,
+#   and downstream evaluation.
+#
+# How this module connects to other parts of the NLP/ML pipeline:
+#   - It expects a pre-loaded BERT embedder to convert sentences into vectors.
+#   - It may load or train a KNN model from labeled examples stored in data/.
+#   - It uses spaCy (via a passed `nlp`) for sentence splitting and TextBlob for
+#     a lightweight sentiment signal. The main app calls these functions when
+#     processing extracted resume text.
+################################################################################
 """
 Self-promotion scoring using KNN and heuristics.
 
@@ -19,6 +43,12 @@ from sklearn.neighbors import KNeighborsClassifier
 from textblob import TextBlob
 
 
+# Function: load_knn_model
+# What: Load or train a KNN classifier using saved model or CSV dataset.
+# Why: Ensure there is a trained KNN model available for scoring sentences.
+# Inputs: _bert_model - an object exposing an `encode(list_of_sentences)` method.
+# Returns: a fitted KNeighborsClassifier, a Dummy fallback, or None on failure.
+# How it contributes: Supplies the ML component used by get_base_score for per-sentence probabilities.
 @st.cache_resource
 def load_knn_model(_bert_model):
     """
@@ -66,6 +96,13 @@ def load_knn_model(_bert_model):
         return None
 
 
+# Function: has_metric
+# What: Detect numeric metrics, percentages, or monetary figures in a sentence.
+# Why: Quantified achievements often indicate stronger self-promotion; this
+#      flag is used to add a heuristic bonus to the sentence score.
+# Inputs: sentence (str)
+# Returns: bool indicating whether numeric metrics are present
+# How it contributes: Adds a metric-based boost to final sentence scoring.
 def has_metric(sentence: str) -> bool:
     """
     Check if a sentence contains metrics or numbers (e.g., percentages, counts, money).
@@ -74,6 +111,12 @@ def has_metric(sentence: str) -> bool:
     return bool(re.search(r"(\b\d+%|\b\d{1,3}\b|\$\d+[kKmM]?)", sentence))
 
 
+# Function: get_base_score
+# What: Compute a base ML score (probability) using the KNN model and BERT embeddings.
+# Why: Provides an ML-derived probability of a sentence being self-promotional.
+# Inputs: knn_model, _bert_model, sentence (str)
+# Returns: float probability in [0.0, 1.0]; 0.0 on failure or missing model
+# How it contributes: Serves as the core signal which heuristics then augment.
 def get_base_score(knn_model, _bert_model, sentence: str) -> float:
     """
     Get the base self-promotion score for a sentence using the KNN model.
@@ -94,6 +137,13 @@ def get_base_score(knn_model, _bert_model, sentence: str) -> float:
         return 0.0
 
 
+# Function: smart_sentence_split
+# What: Segment resume text into a list of substantial sentences using spaCy.
+# Why: Resumes can contain paragraphs and bullets; this helper preserves
+#      paragraph boundaries and filters out fragments to produce scoring candidates.
+# Inputs: nlp (spaCy language model), text (str)
+# Returns: list of sentence strings suitable for scoring
+# How it contributes: Prepares clean sentence inputs for get_base_score and heuristics.
 def smart_sentence_split(nlp, text: str) -> list:
     """
     Split resume text into sentences, respecting paragraph boundaries from extraction.
@@ -124,6 +174,13 @@ def smart_sentence_split(nlp, text: str) -> list:
     return sentences
 
 
+# Function: analyze_sentences
+# What: Score all sentences in provided text using ML + heuristic rules.
+# Why: Central scoring routine used by the main app to get per-sentence and
+#      aggregate self-promotion signals.
+# Inputs: nlp (spaCy model), knn_model, _bert_model, text (str), action_verbs (list), file_type (optional)
+# Returns: tuple (list_of_(sentence,score), average_score)
+# How it contributes: Produces the primary outputs used by highlighting and metrics.
 def analyze_sentences(nlp, knn_model, _bert_model, text: str, action_verbs: list, file_type=None):
     """
     Analyze all sentences in the input text and return a list of (sentence, score) pairs.
@@ -335,6 +392,13 @@ def analyze_sentences(nlp, knn_model, _bert_model, text: str, action_verbs: list
     return sents, avg
 
 
+# Function: fallback_segment
+# What: A gentle, robust sentence splitter for very messy or unstructured input.
+# Why: When spaCy splitting and other heuristics fail, this provides a simpler
+#      segmentation that protects common technical abbreviations.
+# Inputs: text (str)
+# Returns: list of cleaned sentence-like strings
+# How it contributes: Supplies fallback sentences for analyze_with_fallback.
 def fallback_segment(text: str) -> list:
     """
     Gentle sentence splitter for poorly formatted resumes.
@@ -392,6 +456,12 @@ def fallback_segment(text: str) -> list:
     return out
 
 
+# Function: analyze_with_fallback
+# What: Use fallback_segment and apply the same scoring heuristics to produce scores.
+# Why: Provide robustness for very messy input where the primary splitter fails.
+# Inputs: knn_model, _bert_model, text (str), action_verbs (list), max_sentences (optional int)
+# Returns: tuple (list_of_(sentence,score), average_score)
+# How it contributes: Ensures scoring is available even for poorly formatted resumes.
 def analyze_with_fallback(knn_model, _bert_model, text: str, action_verbs: list, max_sentences: int = None):
     """
     Analyze using fallback segmentation with full scoring.

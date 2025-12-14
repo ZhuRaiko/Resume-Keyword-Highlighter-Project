@@ -1,4 +1,45 @@
+% highlight_latex.md — readable LaTeX layout with highlighted comments
 
+\section*{highlight.py}
+
+\subsection*{Overview}
+\textbf{Purpose:} Context-aware keyword highlighting for resume parsing; produces HTML spans for hard skills, soft skills, recruiter keywords, and action verbs.
+
+\textbf{Role in system:} Used by the main application to render highlighted resumes and to provide validated keyword spans for downstream metrics.
+
+\subsection*{Notes on this LaTeX view}
+The code is shown inside a \texttt{lstlisting} block. Comments are styled green for visual separation while explanatory text remains black for readability. Include the `listings` and `xcolor` packages and set `commentstyle=\color{green}` when compiling.
+
+\begin{verbatim}
+\usepackage{xcolor}
+\usepackage{listings}
+\lstset{commentstyle=\color{green}, basicstyle=\ttfamily\small}
+\end{verbatim}
+
+\subsection*{Source — full module}
+\begin{lstlisting}[language=Python, basicstyle=\ttfamily\small, breaklines=true, frame=single, commentstyle=\color{green}]
+################################################################################
+# Module: highlight.py
+#
+# What this module does:
+#   Provides context-aware keyword highlighting for resume text. It locates
+#   hard skills, soft skills, recruiter keywords, and action verbs within input
+#   text, validates the linguistic context of each match to reduce false
+#   positives, and renders highlighted HTML spans for display.
+#
+# Why this module is necessary in the overall system:
+#   The UI needs accurate, context-aware highlights to surface candidate skills
+#   and actions without flagging irrelevant tokens (e.g., dates, adjectives,
+#   or parts of email addresses). This module centralizes that logic and returns
+#   the final HTML used by the front-end or other display components.
+#
+# How this module connects to other parts of the NLP/ML pipeline:
+#   - Accepts a spaCy `nlp` pipeline for tokenization and sentence segmentation.
+#   - Uses sentiment (TextBlob) on sentence-level contexts to help filter soft
+#     skill matches under negative contexts.
+#   - Exposes `highlight_keywords()` which the main app calls after text
+#     extraction to produce HTML for display and further analysis.
+################################################################################
 """
 Keyword highlighting with context validation for resume parsing.
 
@@ -14,6 +55,20 @@ import re
 from textblob import TextBlob
 
 
+# Function: highlight_keywords
+# What: Identify and HTML-highlight keywords (hard/soft/recruiter/action) in a resume text.
+# Why: Provide a context-validated, styled HTML output for UI highlighting and downstream review.
+# Inputs:
+#   - nlp: spaCy language model used to parse the text into tokens/sentences.
+#   - text (str): Input resume text to process.
+#   - hard_skills, soft_skills, recruiter_keywords, action_verbs (list): Keyword lists.
+#   - disabled_labels (optional set): Labels to skip highlighting.
+#   - token_aligned (bool): If True, trims matches to token boundaries where appropriate.
+#   - relax_hard/relax_action/relax_soft/relax_recruiter (bool): Relax context checks per category.
+#   - soft_neg_threshold (float): Sentiment polarity cutoff to skip soft matches.
+#   - render_legacy (bool): Use legacy HTML style if True.
+# Returns: str containing HTML with highlighted spans.
+# How it contributes: Central UI helper that ensures only contextually-valid keywords are highlighted.
 def highlight_keywords(
     nlp,
     text: str,
@@ -32,63 +87,23 @@ def highlight_keywords(
 ) -> str:
     """
     Highlight keywords in resume text with context validation and HTML rendering.
-
-    This function processes the input text, identifies keywords from the provided lists (hard skills, soft skills, recruiter keywords, action verbs), and highlights them using HTML spans with color coding. It uses spaCy for NLP parsing and TextBlob for sentiment analysis to apply context-aware heuristics, reducing false positives and ensuring meaningful highlighting.
-
-    Args:
-        nlp: spaCy language model for parsing text.
-        text (str): The resume or input text to process.
-        hard_skills (list): List of hard skill keywords.
-        soft_skills (list): List of soft skill keywords.
-        recruiter_keywords (list): List of recruiter-focused keywords.
-        action_verbs (list): List of action verb keywords.
-        disabled_labels (set, optional): Labels to skip highlighting (e.g., {"SOFT"}).
-        token_aligned (bool): If True, highlights are aligned to token boundaries.
-        relax_hard (bool): If True, relaxes context checks for hard skills (less strict).
-        relax_action (bool): If True, relaxes context checks for action verbs.
-        relax_soft (bool): If True, relaxes context checks for soft skills.
-        relax_recruiter (bool): If True, relaxes context checks for recruiter keywords.
-        soft_neg_threshold (float): Polarity threshold for negative soft skill context (skip if below).
-        render_legacy (bool): If True, uses legacy HTML rendering style (no padding/border radius).
-
-    Returns:
-        str: HTML string with highlighted keywords.
     """
     if disabled_labels is None:
         disabled_labels = set()
 
     # Find excluded spans (e.g., emails, URLs) to avoid highlighting inside them
-    # This prevents accidental highlighting of keywords inside email addresses or links
     excluded = []
     for m in re.finditer(r"\b[\w\.-]+@[\w\.-]+\.[a-zA-Z]{2,}\b|https?://\S+|www\.\S+", text):
         excluded.append((m.start(), m.end()))
 
     def overlaps(span):
-        """
-        Check if a given span overlaps with any excluded region (e.g., email, URL).
-        Args:
-            span (tuple): (start, end) character indices.
-        Returns:
-            bool: True if overlaps, False otherwise.
-        """
         a0, a1 = span
         for b0, b1 in excluded:
             if not (a1 <= b0 or a0 >= b1):
                 return True
         return False
 
-    # Context validation function for keyword matches
     def is_valid_context(window, label):
-        """
-        Validate that the matched token window is used in an appropriate context for the given label.
-        Applies heuristics to avoid false positives (e.g., dates, adjectives, verbs in wrong context).
-        Args:
-            window (list): List of spaCy tokens for the match.
-            label (str): Keyword category (e.g., 'HARD', 'SOFT').
-        Returns:
-            bool: True if context is valid, False otherwise.
-        """
-        # HARD skills: Check for date/time context patterns
         if label == 'HARD':
             for tok in window:
                 nearby_tokens = []
@@ -104,7 +119,6 @@ def highlight_keywords(
                     if tok.text.lower() in non_tech_in_dates:
                         return False
         
-        # Single-token checks
         if len(window) == 1:
             tok = window[0]
             if tok.pos_ == 'ADJ' and tok.head != tok and tok.head.pos_ == 'NOUN' and tok.i < tok.head.i:
@@ -120,7 +134,6 @@ def highlight_keywords(
                 if tok.dep_ in ('amod', 'compound') and tok.head not in window:
                     return False
         
-        # Multi-token checks
         first_tok = window[0]
         last_tok = window[-1]
         
@@ -133,7 +146,6 @@ def highlight_keywords(
         
         return True
 
-    # Build keyword maps
     all_keywords = []
     for k in recruiter_keywords:
         if k:
@@ -158,7 +170,6 @@ def highlight_keywords(
         seen.add(key)
         uniq_keywords.append((label, kn))
 
-    # Process keywords via nlp.pipe
     map_by_tuple = {}
     map_by_joined = {}
     max_kw_len = 1
@@ -177,12 +188,10 @@ def highlight_keywords(
             if len(lem_tup) > max_kw_len:
                 max_kw_len = len(lem_tup)
 
-    # Parse document
     doc = nlp(text)
     tokens = [tok for tok in doc]
     n = len(tokens)
 
-    # Prepare sentence-level caches
     sents = list(doc.sents)
     sent_polarity = {}
     sent_has_verb = {}
@@ -203,7 +212,6 @@ def highlight_keywords(
     occupied_tokens = set()
     replacements = []
 
-    # Detect skill enumerations
     def find_skill_enumerations():
         enum_spans = []
         for sent in sents:
@@ -224,7 +232,6 @@ def highlight_keywords(
     
     skill_enum_spans = find_skill_enumerations()
 
-    # Main matching loop
     i = 0
     while i < n:
         if i in occupied_tokens:
@@ -232,7 +239,6 @@ def highlight_keywords(
             continue
         matched = False
         
-        # Check skill enumerations first
         for enum_start, enum_end in skill_enum_spans:
             if i == enum_start and not any(k in occupied_tokens for k in range(enum_start, enum_end)):
                 window = tokens[enum_start:enum_end]
@@ -251,7 +257,6 @@ def highlight_keywords(
             i += 1
             continue
         
-        # Try longest-first windows
         for L in range(min(max_kw_len, n - i), 0, -1):
             j = i + L - 1
             window = tokens[i:j+1]
@@ -269,11 +274,9 @@ def highlight_keywords(
 
             label, display_kw = meta
 
-            # Skip if disabled
             if label in disabled_labels:
                 continue
 
-            # Context validation for SOFT/RECRUITER
             if label in ('SOFT', 'RECRUITER'):
                 skip_match = False
                 if len(window) == 1:
@@ -298,12 +301,10 @@ def highlight_keywords(
                 if skip_match:
                     continue
 
-            # Compute span
             s_char = window[0].idx
             e_char = window[-1].idx + len(window[-1].text)
             matched_text = text[s_char:e_char]
 
-            # Trim to alphanumeric boundaries
             allowed_symbols = set(['+', '#', '-'])
             if (not token_aligned) or ('.' in (display_kw or '')):
                 allowed_symbols.add('.')
@@ -329,7 +330,6 @@ def highlight_keywords(
             while last_i+1 < len(matched_text) and matched_text[last_i+1] in allowed_symbols:
                 last_i += 1
 
-            # Clamp symbol runs
             allowed_counts = {'+': 2, '#': 1, '.': 1, '-': 1}
             if last_i > last_alnum:
                 run_char = matched_text[last_alnum+1]
@@ -365,16 +365,12 @@ def highlight_keywords(
             if all(k in occupied_tokens for k in range(i, j+1)):
                 continue
 
-            # Apply heuristics per category
             sent_idx = sent_index_by_token.get(i, None)
             
             if label == 'HARD':
                 if not relax_hard:
-                    # Check if it's an acronym (all caps, 2-5 chars) - always accept
                     is_acronym = any(t.text.isupper() and 2 <= len(t.text) <= 5 for t in window)
-                    # Check if it contains special chars like C++, C#, .NET
                     has_special = any(c in display_kw for c in ['+', '#', '.'])
-                    # Check for standard technical term patterns
                     ok = (is_acronym or has_special or 
                           any(t.pos_ in ('NOUN', 'PROPN', 'X') for t in window) or 
                           any(t.dep_ in ('dobj', 'pobj', 'attr', 'appos', 'compound') for t in window))
@@ -405,23 +401,18 @@ def highlight_keywords(
                     is_valid_action = False
                     for t in window:
                         if t.pos_ == 'VERB':
-                            # Accept verbs with direct objects (dobj)
                             if any(c.dep_ == 'dobj' for c in t.children):
                                 is_valid_action = True
                                 break
-                            # Accept verbs with prepositional objects (pobj via prep)
                             if any(c.dep_ in ('prep', 'agent') for c in t.children):
                                 is_valid_action = True
                                 break
-                            # Accept ROOT verbs (main verb of sentence)
                             if t.dep_ == 'ROOT':
                                 is_valid_action = True
                                 break
-                            # Accept sentence-initial verbs (common in resume bullets)
                             if t.i == 0 or (t.i > 0 and t.doc[t.i-1].text in ('•', '-', '*', '·', '►', '●')):
                                 is_valid_action = True
                                 break
-                            # Accept conjoined verbs (e.g., "developed and deployed")
                             if t.dep_ in ('conj', 'xcomp', 'ccomp', 'advcl'):
                                 is_valid_action = True
                                 break
@@ -436,7 +427,6 @@ def highlight_keywords(
                     downgraded = False
                 color = '#ff9f43' if not downgraded else '#ffd79d'
 
-            # Build HTML
             matched_text = text[new_s:new_e]
             if render_legacy:
                 html = f"<span style='background-color:{color}; color:white;'>{matched_text}</span>"
@@ -454,8 +444,8 @@ def highlight_keywords(
         else:
             i += 1
 
-    # Apply replacements
     out = text
     for s, e, html in sorted(replacements, key=lambda x: x[0], reverse=True):
         out = out[:s] + html + out[e:]
     return out
+\end{lstlisting}

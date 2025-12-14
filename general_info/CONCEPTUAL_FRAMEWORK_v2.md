@@ -1,129 +1,90 @@
-# Conceptual Framework: SkillHighlight Resume Self-Promotion Analyzer
+
+# Conceptual Framework: SkillHighlight Resume Self-Promotion Analyzer (Revised)
 
 ```
-┌──────────────────────┬───────────────────────────┬────────────────────────────┬──────────────────────────┐
-│   DATA & PREPARATION │  REPRESENTATION & ENCODING│   LEARNING & EXTRACTION    │  KNOWLEDGE APPLICATION   │
-├──────────────────────┼───────────────────────────┼────────────────────────────┼──────────────────────────┤
-│                      │                           │                            │                          │
-│  ┌────────────────┐  │  ┌─────────────────────┐  │  ┌──────────────────────┐  │  ┌────────────────────┐  │
-│  │     DATA       │  │  │ FEATURE EXTRACTION  │  │  │  TRANSFORMER KERNEL  │  │  │   SELF-PROMOTION   │  │
-│  │    Resume      │  │  │     EMBEDDING       │  │  │                      │  │  │      SCORING       │  │
-│  │    Corpus      │  │  │                     │  │  │  Contextual encoder  │  │  │                    │  │
-│  │                │  │  │  SentenceBERT       │  │  │  Domain-adapted      │  │  │  Achievement-aware │  │
-│  │  • PDF files   │  │  │  Contextual encoding│  │  │  resume signals      │  │  │  Q&A guidance      │  │
-│  │  • DOCX files  │  │  │  Domain-adapted     │  │  │                      │  │  │                    │  │
-│  │  • TXT input   │  │  │  resume embeddings  │  │  └──────────┬───────────┘  │  └─────────┬──────────┘  │
-│  └───────┬────────┘  │  └──────────┬──────────┘  │             │              │            │             │
-│          │           │             │             │             ▼              │            │             │
-│          ▼           │             │             │  ┌──────────────────────┐  │            │             │
-│  ┌────────────────┐  │             │             │  │ CONCEPT DETECTION    │  │            ▼             │
-│  │ PREPROCESSING  │  │             │             │  │                      │  │  ┌────────────────────┐  │
-│  │                │  │             │             │  │  Token span +        │  │  │    EVALUATION      │  │
-│  │  Cleaning,     │  │             │             │  │  keyword classes     │  │  │                    │  │
-│  │  Text parsing, │  │             │             │  │  Max-margin with     │  │  │  Accuracy: 89.9%   │  │
-│  │  PDF→DOCX,     │  │             │             │  │  class weighting     │  │  │  Precision: 91.4%  │  │
-│  │  Normalization │  │             │             │  │                      │  │  │  Recall: 86.9%     │  │
-│  │                │  │             │             │  └──────────┬───────────┘  │  │  F1-Score: 89.1%   │  │
-│  └───────┬────────┘  │             │             │             │              │  │                    │  │
-│          │           │             │             │             ▼              │  └────────────────────┘  │
-│          ▼           │             ▼             │  ┌──────────────────────┐  │                          │
-│  ┌────────────────┐  │  ┌─────────────────────┐  │  │ KEYWORD              │  │                          │
-│  │  LINGUISTIC &  │  │  │       LABEL         │  │  │ CLASSIFICATION       │  │                          │
-│  │  ANNOTATION    │  │  │                     │  │  │                      │  │                          │
-│  │                │  │  │  Keyword Classes &  │  │  │  • Hard Skills       │──┼──────────────────────┐   │
-│  │  SpaCy NLP,    │  │  │  Self-Promotion     │  │  │  • Soft Skills       │  │                      │   │
-│  │  POS Tagging,  │  │  │  Score Type         │  │  │  • Recruiter KWs     │  │                      ▼   │
-│  │  Dependency    │  │  │                     │  │  │  • Action Verbs      │  │  ┌────────────────────┐  │
-│  │  Parsing,      │  │  │  • 0 = Neutral      │  │  │                      │  │  │   HIGHLIGHTED      │  │
-│  │  NER           │  │  │  • 1 = Self-Promo   │  │  │  Uses SpaCy NLP      │  │  │   RESUME OUTPUT    │  │
-│  │                │  │  │                     │  │  │  for validation      │  │  │                    │  │
-│  └───────┬────────┘  │  └──────────┬──────────┘  │  │                      │  │  │  Color-coded       │  │
-│          │           │             │             │  └──────────┬───────────┘  │  │  keyword display   │  │
-│          │           │             │             │             │              │  │  with toggles      │  │
-│          │           │             ▼             │             ▼              │  │                    │  │
-│          │           │  ┌─────────────────────┐  │  ┌──────────────────────┐  │  └────────────────────┘  │
-│          │           │  │ KEYWORD FEATURES    │  │  │ TRAINING & TUNING    │  │                          │
-│          │           │  │                     │  │  │                      │  │                          │
-│          │           │  │  Keyword Database   │  │  │  Contextual encoder  │  │                          │
-│          │           │  │  (JSON)             │  │  │  Domain-adapted      │  │                          │
-│          │           │  │                     │  │  │  resume signals      │  │                          │
-│          │           │  │  • 4 Categories     │  │  │                      │  │                          │
-│          │           │  │  • Pattern rules    │  │  │  KNN (k=5)           │  │                          │
-│          │           │  │  • Context filters  │  │  │  10,000 samples      │  │                          │
-│          │           │  │                     │  │  │                      │  │                          │
-│          │           │  └─────────────────────┘  │  └──────────────────────┘  │                          │
-│          │           │                           │                            │                          │
-└──────────┼───────────┴───────────────────────────┴────────────────────────────┴──────────────────────────┘
-           │
-           ▼
-┌──────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                                                                                          │
-│   CLEANED TOKENS/SPANS          EMBEDDINGS, LABELED SPANS         PREDICTED KEYWORDS AND                 │
-│   + LINGUISTIC FEATURES    ───► AND KEYWORD FEATURES          ───► SELF-PROMOTION SCORES                 │
-│   READY FOR ENCODING            READY FOR CLASSIFICATION           (STRUCTURED RESULTS)                  │
-│                                                                                                          │
-└──────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────┬──────────────────────────────┬──────────────────────────────┬──────────────────────────────┐
+│   INPUT & PREPROCESSING      │  FEATURE REPRESENTATION      │  CLASSIFICATION & SCORING    │  OUTPUT & EVALUATION         │
+├──────────────────────────────┼──────────────────────────────┼──────────────────────────────┼──────────────────────────────┤
+│ ┌─────────────────────────┐  │ ┌─────────────────────────┐  │ ┌─────────────────────────┐  │ ┌─────────────────────────┐  │
+│ │ Resume Files (PDF,      │  │ │ Sentence Embeddings     │  │ │ KNN Classifier         │  │ │ Highlighted Resume      │  │
+│ │ DOCX, TXT)              │  │ │ (SentenceBERT)          │  │ │ (Self-promotion,       │  │ │ (Color-coded,           │  │
+│ └─────────────┬───────────┘  │ │ Keyword Features        │  │ │  Keyword Category)     │  │ │  Interactive)           │  │
+│               │              │ │ (JSON, Pattern Rules)   │  │ │ Heuristic Scoring      │  │ │ Model Metrics            │  │
+│ ┌─────────────▼───────────┐  │ │ Linguistic Features     │  │ │ Sentiment Adjustment   │  │ │ (Accuracy, F1, etc.)     │  │
+│ │ Preprocessing:          │  │ │ (spaCy, POS, NER)       │  │ └─────────────┬─────────┘  │ └─────────────┬───────────┘  │
+│ │ Cleaning, Normalization │  │ └─────────────┬──────────┘  │               │            │               │              │
+│ │ PDF→DOCX, spaCy NLP     │  │               │             │               │            │               │              │
+│ └─────────────┬───────────┘  │               │             │               │            │               │              │
+│               │              │               │             │               │            │               │              │
+└───────────────┼──────────────┴───────────────┼─────────────┴───────────────┼────────────┴───────────────┘
+              │                              │                             │
+              ▼                              ▼                             ▼
+       ┌─────────────────────────┐    ┌─────────────────────────┐   ┌─────────────────────────┐
+       │  Cleaned & Annotated    │    │  Embeddings & Features  │   │  Classification &       │
+       │  Text                   │────▶  (Vectors, Keywords)   │───▶  Scoring               │───▶ Output & Evaluation
+       └─────────────────────────┘    └─────────────────────────┘   └─────────────────────────┘
+
+    (Dashed arrow from Output & Evaluation back to Classification & Scoring for future feedback loop)
 ```
 
 ---
 
-## Component Details
 
-### Column 1: DATA & PREPARATION
+## Component Details (Aligned to Revised Framework)
 
+### 1. Input & Preprocessing
 | Component | Description |
 |-----------|-------------|
-| **DATA** | Resume corpus input (PDF, DOCX, TXT formats) |
-| **PREPROCESSING** | Text cleaning, PDF→DOCX conversion, Unicode normalization, whitespace handling |
-| **LINGUISTIC & ANNOTATION** | SpaCy NLP pipeline for POS tagging, dependency parsing, and Named Entity Recognition |
+| **Resume Files** | Input resumes in PDF, DOCX, or TXT formats |
+| **Preprocessing** | Cleaning, normalization, PDF→DOCX conversion |
+| **Linguistic Annotation** | spaCy NLP pipeline: POS tagging, NER |
 
-### Column 2: REPRESENTATION & ENCODING
-
+### 2. Feature Representation
 | Component | Description |
 |-----------|-------------|
-| **FEATURE EXTRACTION EMBEDDING** | SentenceBERT (all-MiniLM-L6-v2) for 384-dimensional contextual embeddings |
-| **LABEL** | Binary classification labels (0=Neutral, 1=Self-Promotional) for training |
-| **KEYWORD FEATURES** | JSON-based keyword database with 4 categories and linguistic context rules |
+| **Sentence Embeddings** | SentenceBERT (all-MiniLM-L6-v2), 384-dim vectors |
+| **Keyword Features** | JSON-based keyword database, pattern rules |
+| **Linguistic Features** | POS, NER, dependency parsing (spaCy) |
 
-### Column 3: LEARNING & EXTRACTION
-
+### 3. Classification & Scoring
 | Component | Description |
 |-----------|-------------|
-| **TRANSFORMER KERNEL** | BERT-based contextual encoder adapted for resume domain signals |
-| **CONCEPT DETECTION** | Token span identification with keyword class weighting |
-| **KEYWORD CLASSIFICATION** | SpaCy-validated classification into Hard Skills, Soft Skills, Recruiter Keywords, Action Verbs |
-| **TRAINING & TUNING** | KNN classifier (k=5) trained on 10,000 labeled resume sentences |
+| **KNN Classifier** | scikit-learn KNN (k=5), predicts self-promotion and keyword category |
+| **Heuristic Scoring** | Achievement-aware, rule-based adjustments |
+| **Sentiment Adjustment** | TextBlob polarity scoring for fine-tuning |
 
-### Column 4: KNOWLEDGE APPLICATION
-
+### 4. Output & Evaluation
 | Component | Description |
 |-----------|-------------|
-| **SELF-PROMOTION SCORING** | Achievement-aware scoring with heuristic adjustments for metrics, patterns, and sentiment |
-| **EVALUATION** | Model performance: 89.9% accuracy, 91.4% precision, 86.9% recall, 89.1% F1-score |
-| **HIGHLIGHTED RESUME OUTPUT** | Interactive color-coded display with category toggles and composition percentages |
+| **Highlighted Resume** | Color-coded, interactive output with toggles |
+| **Model Metrics** | Accuracy: 89.9%, Precision: 91.4%, Recall: 86.9%, F1: 89.1% |
+| **User Feedback (Future)** | Potential for feedback loop to improve model |
 
 ---
 
-## Data Flow Summary
+
+## Data Flow Summary (Linear)
 
 ```
-INPUT                           PROCESSING                        OUTPUT
-─────                           ──────────                        ──────
-
-Resume Document          ───►   Text Extraction           ───►   Self-Promotion Score
-(PDF/DOCX/TXT)                  & Normalization                  (0.0 - 1.0)
-
-                         ───►   BERT Encoding             ───►   Highlighted Keywords
-                                (384-dim vectors)                (4 color-coded categories)
-
-                         ───►   KNN Classification        ───►   Sentence-by-Sentence
-                                (k=5, 10K samples)               Analysis & Feedback
+Resume Document (PDF/DOCX/TXT)
+       │
+       ▼
+Preprocessing (Cleaning, Normalization, spaCy NLP)
+       │
+       ▼
+Feature Extraction (SentenceBERT Embeddings, Keyword Features)
+       │
+       ▼
+Classification & Scoring (KNN, Heuristics, Sentiment)
+       │
+       ▼
+Output (Highlighted Resume, Metrics)
 ```
 
 ---
+
 
 ## Technology Stack
-
 | Layer | Technology | Role |
 |-------|------------|------|
 | **Embeddings** | SentenceTransformers (all-MiniLM-L6-v2) | Semantic sentence encoding |
@@ -135,83 +96,42 @@ Resume Document          ───►   Text Extraction           ───►  
 
 ---
 
-## Research Gaps & Limitations
 
-This section identifies the current gaps and limitations within each phase of the framework, providing transparency about the system's boundaries and opportunities for future research.
+## Research Gaps & Limitations (Aligned to Revised Framework)
 
-### Gap Analysis by Framework Column
-
-```
-┌──────────────────────┬───────────────────────────┬────────────────────────────┬──────────────────────────┐
-│   DATA & PREPARATION │  REPRESENTATION & ENCODING│   LEARNING & EXTRACTION    │  KNOWLEDGE APPLICATION   │
-│        GAPS          │          GAPS             │          GAPS              │          GAPS            │
-├──────────────────────┼───────────────────────────┼────────────────────────────┼──────────────────────────┤
-│                      │                           │                            │                          │
-│  ⚠ Limited to        │  ⚠ Pre-trained model      │  ⚠ KNN is simpler than     │  ⚠ No real recruiter     │
-│    English resumes   │    not fine-tuned on      │    deep learning           │    validation of         │
-│                      │    resume-specific data   │    alternatives            │    scoring accuracy      │
-│  ⚠ PDF extraction    │                           │                            │                          │
-│    fallback chain    │  ⚠ 384-dim embeddings     │  ⚠ Binary classification   │  ⚠ No A/B testing with   │
-│    may lose          │    may miss nuanced       │    (0/1) loses             │    actual job            │
-│    formatting        │    resume semantics       │    granularity             │    applications          │
-│                      │                           │                            │                          │
-│  ⚠ No image/chart    │  ⚠ Static keyword         │  ⚠ Dataset limited to      │  ⚠ Industry-agnostic     │
-│    text extraction   │    database requires      │    10,000 samples          │    scoring (no domain    │
-│                      │    manual updates         │                            │    customization)        │
-│                      │                           │                            │                          │
-│  ⚠ Multi-column      │  ⚠ No multi-lingual       │  ⚠ No continuous           │  ⚠ User feedback not     │
-│    layouts may       │    support                │    learning/model          │    incorporated into     │
-│    extract poorly    │                           │    updates                 │    model improvement     │
-│                      │                           │                            │                          │
-└──────────────────────┴───────────────────────────┴────────────────────────────┴──────────────────────────┘
-```
-
-### Detailed Gap Descriptions
-
-#### Column 1: Data & Preparation Gaps
-
+### 1. Input & Preprocessing
 | Gap | Description | Impact |
 |-----|-------------|--------|
-| **Language Limitation** | System only processes English-language resumes | Excludes non-English job markets |
-| **PDF Extraction Quality** | Complex PDF layouts (multi-column, tables, graphics) may not extract cleanly | Loss of structural information |
-| **No OCR Support** | Scanned PDFs or image-based resumes cannot be processed | Limits input format compatibility |
-| **Formatting Loss** | Original resume formatting (bold, italics, bullets) not preserved in analysis | Context from visual hierarchy lost |
+| **Language Limitation** | Only English resumes supported | Excludes non-English job markets |
+| **PDF Extraction Quality** | Complex layouts may not extract cleanly | Loss of structure/context |
+| **No OCR Support** | Cannot process scanned/image-based resumes | Limits input compatibility |
 
-#### Column 2: Representation & Encoding Gaps
-
+### 2. Feature Representation
 | Gap | Description | Impact |
 |-----|-------------|--------|
-| **Generic Pre-trained Model** | all-MiniLM-L6-v2 trained on general text, not resume-specific corpus | May miss domain-specific semantics |
-| **Static Keyword Database** | Keywords manually curated; no automatic discovery of emerging terms | Database may become outdated |
-| **Fixed Embedding Dimensions** | 384 dimensions may not capture all nuances of professional language | Potential information compression |
-| **No Contextual Keyword Weighting** | All keyword categories weighted equally regardless of job type | One-size-fits-all approach |
+| **Generic Pre-trained Model** | Not fine-tuned on resumes | May miss domain-specific meaning |
+| **Static Keyword Database** | Manual updates required | May become outdated |
+| **Fixed Embedding Dimensions** | 384-dim may not capture all nuances | Information compression risk |
 
-#### Column 3: Learning & Extraction Gaps
-
+### 3. Classification & Scoring
 | Gap | Description | Impact |
 |-----|-------------|--------|
-| **Simple Classifier** | KNN chosen over deep learning (LSTM, transformers) for interpretability | May sacrifice accuracy for simplicity |
-| **Binary Labels** | Self-promotion scored as 0 or 1, not on a continuous scale | Loses nuance in borderline cases |
-| **Dataset Size** | 10,000 samples sufficient but smaller than industry-scale datasets | May not generalize to all resume styles |
-| **No Online Learning** | Model is static; doesn't improve from user interactions | Cannot adapt to new patterns |
-| **Single Dataset Source** | Training data from one curated source | May have inherent biases |
+| **Simple Classifier** | KNN over deep learning for interpretability | May sacrifice accuracy |
+| **Binary Labels** | 0/1 scoring, not continuous | Loses nuance in borderline cases |
+| **Dataset Size** | 10,000 samples, not industry-scale | May not generalize fully |
+| **No Online Learning** | Model is static | Cannot adapt to new data |
 
-#### Column 4: Knowledge Application Gaps
-
+### 4. Output & Evaluation
 | Gap | Description | Impact |
 |-----|-------------|--------|
-| **No Recruiter Validation** | Scores not validated against actual recruiter preferences | Uncertain real-world effectiveness |
-| **No Outcome Tracking** | Cannot measure if highlighted resumes lead to more interviews | No empirical success metrics |
-| **Industry Agnostic** | Same scoring criteria for all industries (tech, healthcare, finance) | May not reflect domain norms |
-| **No Personalization** | Cannot adapt recommendations to specific job postings | Generic feedback only |
-| **Heuristic Adjustments** | Score adjustments (metrics, achievements) are rule-based, not learned | May not capture all patterns |
+| **No Recruiter Validation** | No real-world recruiter feedback | Uncertain effectiveness |
+| **No Outcome Tracking** | Cannot measure real-world impact | No empirical success metrics |
+| **Industry Agnostic** | Same scoring for all industries | May not reflect domain norms |
+| **No Personalization** | No adaptation to job postings | Generic feedback only |
 
 ---
 
 ### Scope Delimitations
-
-The following are **intentional exclusions** from the current research scope:
-
 | Exclusion | Rationale |
 |-----------|-----------|
 | **Real-time recruiter feedback loop** | Requires industry partnership and longitudinal study |
@@ -223,17 +143,14 @@ The following are **intentional exclusions** from the current research scope:
 ---
 
 ### Future Research Opportunities
-
-Based on identified gaps, future work could address:
-
-1. **Fine-tuning BERT on resume corpus** - Improve domain-specific embeddings
-2. **Multi-class scoring** - Replace binary with 5-point self-promotion scale
-3. **Industry-specific models** - Train separate classifiers per domain
-4. **Recruiter validation study** - Partner with HR professionals for ground truth
-5. **Continuous learning pipeline** - Incorporate user feedback for model updates
-6. **Multi-lingual expansion** - Add support for Spanish, Mandarin, etc.
-7. **ATS simulation** - Reverse-engineer common ATS scoring patterns
+1. Fine-tune BERT on resume corpus
+2. Multi-class/continuous scoring
+3. Industry-specific models
+4. Recruiter validation study
+5. Continuous learning pipeline
+6. Multi-lingual expansion
+7. ATS simulation
 
 ---
 
-*Framework Version: 2.0 | December 2024*
+*Framework Version: 2.1 | December 2025 (Revised)*
