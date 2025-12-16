@@ -166,9 +166,9 @@ Include these points and expand as appropriate:
 
 ## 5.6 Recommendations and next steps (machine-learning focus)
 
-- Run a fairness/bias audit across demographic slices if data includes such metadata.
-- Compare exact KNN to approximate NN (Faiss / hnswlib) for scale and speed improvements.
-- Evaluate fine-tuned transformer classifiers (train a small classifier head on top of the embeddings) and compare to KNN on accuracy and inference cost.
+ - Run a fairness/bias audit across demographic slices if data includes such metadata.
+ - Compare exact KNN to indexed search or other scalable retrieval approaches for scale and speed improvements.
+ - Evaluate fine-tuned transformer classifiers (train a small classifier head on top of the embeddings) and compare to KNN on accuracy and inference cost.
 - Add OCR pre-processing for scanned resumes and extend evaluation to multilingual datasets.
 
 ---

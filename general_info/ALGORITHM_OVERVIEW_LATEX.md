@@ -296,12 +296,13 @@ END FUNCTION
   \item Training: $O(m \cdot d)$ ($m$ = training samples, $d$ = embedding dim)
   \item Query: $O(m \cdot d)$ per query (brute-force)
   \item Batch prediction: $O(q \cdot m \cdot d)$ ($q$ = queries)
-  \item Approximate NN (Faiss, Annoy): $O(d \cdot \log m)$ or sublinear
+  \item Batch prediction: $O(q \cdot m \cdot d)$ ($q$ = queries)
+  \item Search indexing (optional): reduced query cost depending on index design (implementation dependent)
 \end{itemize}
 
 \textbf{Edge cases \& tradeoffs:}
 \begin{itemize}
-  \item Large $m$: Exact KNN is slow; use approximate NN libraries for scalability.
+  \item Large $m$: Exact KNN is slow; consider using an appropriate search index or other scalable retrieval strategy.
   \item Imbalanced classes: KNN can be biased; consider class weighting or threshold tuning.
   \item Curse of dimensionality: High $d$ can reduce KNN effectiveness; dimensionality reduction (PCA, UMAP) may help.
 \end{itemize}
@@ -578,7 +579,7 @@ Here are sample questions and strong talking points for defending each algorithm
   \item \textbf{Why use KNN and cosine similarity?}\\
     KNN is interpretable and robust for semantic embeddings; cosine similarity is effective for high-dimensional spaces.
   \item \textbf{How do you scale to large training sets?}\\
-    We use approximate nearest neighbor libraries (Faiss, Annoy) for sublinear search time.
+    Consider using a suitable search index or other scalable retrieval strategy for larger datasets.
   \item \textbf{What about class imbalance?}\\
     We can tune thresholds or use class weighting to address imbalance.
 \end{itemize}

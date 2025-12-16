@@ -6,7 +6,7 @@ This is the second core academic component of the SkillHighlight system.
 
 Configuration: k=5 neighbors
 Purpose: Classify sentences as self-promotional based on BERT embeddings
-Dataset: Trained on 6,752 labeled resume sentences
+Dataset: Trained on ≈10,000 labeled resume sentences (see `data/self_promotion_dataset.csv`)
 """
 
 import os

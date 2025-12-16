@@ -89,7 +89,7 @@ score = predict_self_promotion_score(sentence, knn, bert_model)
 
 **Academic Significance:**
 - Supervised learning approach
-- 6,752 labeled training samples
+- ≈10,000 labeled training samples
 - Instance-based classification
 
 ## 🛠️ Processing Modules
@@ -124,7 +124,7 @@ score = predict_self_promotion_score(sentence, knn, bert_model)
 > 
 > 1. **BERT Contextual Embeddings**: Sentences are encoded using the pre-trained `all-MiniLM-L6-v2` model, producing 384-dimensional semantic vectors that capture contextual meaning beyond surface-level keywords.
 > 
-> 2. **KNN Classification**: A k-nearest neighbors classifier (k=5) trained on 6,752 manually labeled resume sentences identifies self-promotional content by comparing new sentences to learned patterns in the embedding space.
+> 2. **KNN Classification**: A k-nearest neighbors classifier (k=5) trained on ≈10,000 manually labeled resume sentences identifies self-promotional content by comparing new sentences to learned patterns in the embedding space.
 > 
 > 3. **SpaCy Linguistic Validation**: Keyword highlighting incorporates dependency parsing and part-of-speech tagging to validate contextual appropriateness, preventing false positives such as "Spring 2012" being highlighted as "Spring Framework."
 > 

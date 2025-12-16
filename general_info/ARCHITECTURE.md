@@ -240,7 +240,7 @@ When citing the implementation:
 ### What to Emphasize in Defense
 
 - **Core methodology**: BERT + KNN (machine learning approach)
-- **Training data**: 6,752 labeled sentences (robust dataset for generalization)
+- **Training data**: ≈10,000 labeled sentences (see `data/self_promotion_dataset.csv`) 
 - **Novel contribution**: Combining semantic embeddings with KNN for resume analysis
 - **Validation**: SpaCy provides linguistic context
 

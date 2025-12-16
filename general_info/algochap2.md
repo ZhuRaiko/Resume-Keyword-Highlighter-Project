@@ -1,282 +1,310 @@
-CHAPTER 2
+# Chapter 2 — Algorithms and Implementation Details
+2.1 SentenceTransformer (all‑MiniLM‑L6‑v2) — Sentence Embeddings
 
-2.1 Algorithms and Its Rules
-2.1.1 Keyword Extraction and Highlighting
-The Keyword Extraction and Highlighting module is the foundation of the SkillHighlight system. Its primary function is to scan résumé text, identify relevant skill-related terms, and visually highlight them with contextual accuracy. Using spaCy for linguistic processing, the algorithm performs tokenization, part-of-speech tagging, and dependency parsing to ensure that each word or phrase is evaluated in relation to its syntactic and semantic context. This prevents incorrect detections, such as mistaking dates for numerical skills or confusing verbs for technical competencies. The final output is a context-aware, color-coded résumé that helps users understand which skills are properly emphasized and which areas may require improvement.
-2.1.1.1 Implications of Keyword Extraction
+Description
 
-Context-aware keyword extraction is aligned with research emphasizing the need for deeper semantic and syntactic understanding in résumé analysis systems. Traditional rule-based keyword spotting is prone to false positives, especially when words appear in irrelevant contexts. By integrating lemma comparison, combined-token matching, and contextual filters, the SkillHighlight system adheres to modern approaches that reduce noise and capture more meaningful skill patterns. This ensures that subtle variations—such as "machine learning," "machine-learning," or "ML"—are correctly recognized under a unified skill representation. The method also reflects findings that résumé evaluation tools must interpret terms in the correct context to avoid misclassifying user competencies, thereby improving fairness and accuracy in automated screening systems.
+The system employs the SentenceTransformers `all‑MiniLM‑L6‑v2` model to produce fixed‑length, 384‑dimensional vector representations of sentences. These embeddings serve as the semantic substrate for downstream similarity computations and for the KNN classifier. The implementation loads the model once and reuses it for batch encoding to reduce end‑to‑end latency.
 
-2.1.1.2 Formula and Mathematical Computations
-Let:
-- n = number of tokens in the résumé
-- k = number of keywords in the dictionary
-Tokenization and dependency parsing:
-	O(n)   
-Keyword matching across all tokens and all keywords:
+Pseudocode
 
-	O(nk)
+```
+FUNCTION load_embedding_model():
+  return SentenceTransformer('all-MiniLM-L6-v2')
 
-Context validation for each token:
+FUNCTION encode_sentences(sentences, model, batch_size):
+  vectors = []
+  FOR batch in chunk(sentences, batch_size):
+    v = model.encode(batch)
+    vectors.extend(v)
+  return vectors
+```
 
-	O(n)
+Complexity
 
-Overall dominant complexity:
+- Notation: let s be the number of sentences, d = 384 the embedding dimension, q the number of queries, and b the batch size used for encoding.
+- Encoding time (amortized with batching): O(q · b) for batched encoding workloads; space: O(s · d).
 
-	O(nk)
+Relevance
 
-Lemma tuple used for multi-word keyword matching:
+The Resume Keyword Highlighter represents each sentence as a 384‑dimensional dense real‑valued vector (an embedding) produced by a pretrained SentenceTransformer encoder. Dense embeddings encode semantic information so that sentences with similar meaning occupy nearby positions in the vector space despite lexical variation; this enables semantic matching of sentences that do not share identical surface tokens. The `all‑MiniLM‑L6‑v2` model was selected for its favorable trade‑off between representational fidelity and encoding throughput, providing high‑quality semantic comparisons while maintaining latency acceptable for interactive use.
 
-	(ℓ₁, ℓ₂, ..., ℓ)
+Representative implementation excerpt
 
-Joined alphanumeric variant for matching:
+The following excerpt is taken verbatim from the repository's embedder module. It shows model loading and the encoding function used by the system.
 
-	joined = concat(lower(t₁), ..., lower(t))
+```python
+@st.cache_resource
+def load_bert_model():
+    """
+    Load the pre-trained BERT model for sentence embeddings.
+    Returns:
+        SentenceTransformer: The loaded BERT model (all-MiniLM-L6-v2)
+    """
+    return SentenceTransformer("all-MiniLM-L6-v2")
 
-2.1.1.3 Time Complexity
 
-The final time complexity of keyword extraction is O(nk). This is efficient even for multi-page résumés, as spaCy's operations run in linear time and k remains manageable.
+def encode_sentences(sentences, model=None):
+    """
+    Encode a list of sentences into BERT embeddings.
+    """
+    if model is None:
+        model = load_bert_model()
+    return model.encode(sentences)
+```
 
-2.1.1.4 Pseudocode of Keyword Extraction
+```python
+# Loads and caches the sentence embedding model so repeated calls reuse the same resource.
+@st.cache_resource
+def load_bert_model():
+  """
+  Load the pre-trained BERT model for sentence embeddings.
+  Returns:
+    SentenceTransformer: The loaded BERT model (all-MiniLM-L6-v2)
+  """
+  # The function returns a SentenceTransformer instance; the decorator caches it.
+  return SentenceTransformer("all-MiniLM-L6-v2")
 
-ALGORITHM: KEYWORD_HIGHLIGHTER
 
-INPUT: text (raw resume string), keyword_lists (dict of labeled keyword lists), nlp (spaCy pipeline)
-OUTPUT: highlighted_html (string with inline spans for highlighting)
+def encode_sentences(sentences, model=None):
+  """
+  Encode a list of sentences into BERT embeddings.
+  """
+  # If the caller did not provide a pre-loaded model, load the cached model here.
+  if model is None:
+    model = load_bert_model()
+  # `model.encode` transforms the input list of strings into a numpy array of vectors.
+  return model.encode(sentences)
+```
 
-GLOBAL VARIABLES:
-    None persistent; keyword maps built at runtime
+---
 
-FUNCTION preprocess_keywords(keyword_lists):
-    // Build lemma-tuple and joined-alnum maps for fast lookup
-    map_by_tuple = {}
-    map_by_joined = {}
-    
-    FOR EACH label, kw IN keyword_lists DO
-        toks = nlp(kw)
-        lem_tup = [LOWER(tok.lemma_) FOR tok IN toks]
-        joined = CONCAT_ALNUM([LOWER(tok.text) FOR tok IN toks])
-        map_by_tuple[TUPLE(lem_tup)] = (label, kw)
-        map_by_joined[joined] = (label, kw)
-    END FOR
-    
-    RETURN map_by_tuple, map_by_joined
-END FUNCTION
+## 2.2 K‑Nearest Neighbors (KNN) — Self‑Promotion Scoring
 
-FUNCTION is_valid_context(window_tokens, label):
-    // Heuristics: reject date-contexts for HARD, require verb properties for ACTION, etc.
-    // Returns TRUE if the keyword should be accepted in this token window
-    APPLY rules from implementation
-    RETURN TRUE or FALSE
-END FUNCTION
+Description
 
-FUNCTION highlight_text(text, keyword_lists, nlp):
-    map_by_tuple, map_by_joined = preprocess_keywords(keyword_lists)
-    doc = nlp(text)
-    tokens = LIST(doc)
-    occupied = SET()
-    replacements = []
-    max_kw_len = MAX_KEYWORD_LENGTH(map_by_tuple)
+The system uses a K‑Nearest Neighbors classifier trained on sentence embeddings to estimate the probability that a sentence expresses self‑promotion. The classifier is persisted when trained; during inference a query embedding is compared with stored labeled examples and a probability is returned.
 
-    i = 0
-    WHILE i < LEN(tokens) DO
-        IF i IN occupied THEN
-            i = i + 1
-            CONTINUE
-        END IF
+Pseudocode
 
-        matched = FALSE
-        FOR L = MIN(max_kw_len, LEN(tokens)-i) DOWNTO 1 DO
-            window = tokens[i : i+L]
-            lem_tup = TUPLE(LOWER(t.lemma_) FOR t IN window)
-            joined = CONCAT_ALNUM(LOWER(t.text) FOR t IN window)
-            meta = NULL
-            
-            IF lem_tup IN map_by_tuple THEN
-                meta = map_by_tuple[lem_tup]
-            ELSE IF joined IN map_by_joined THEN
-                meta = map_by_joined[joined]
-            END IF
+```
+FUNCTION train_knn(X_train, y_train, k):
+  knn = KNeighborsClassifier(n_neighbors=k)
+  knn.fit(X_train, y_train)
+  save_model(knn)
+  return knn
 
-            IF meta IS NOT NULL THEN
-                label, display_kw = meta
-                IF NOT is_valid_context(window, label) THEN
-                    CONTINUE
-                END IF
-                
-                s = window[0].idx
-                e = window[-1].idx + LEN(window[-1].text)
-                html = RENDER_SPAN(text[s:e], label)
-                APPEND (s, e, html) TO replacements
-                
-                FOR t_idx = i TO i+L-1 DO
-                    ADD t_idx TO occupied
-                END FOR
-                
-                matched = TRUE
-                BREAK
-            END IF
-        END FOR
+FUNCTION predict_knn(knn, bert_model, sentence):
+  vec = bert_model.encode([sentence])
+  IF knn supports predict_proba:
+    probs = knn.predict_proba(vec)
+    return probs[0][positive_class]
+  ELSE:
+    return knn.predict(vec)[0]
+```
 
-        IF NOT matched THEN
-            i = i + 1
-        ELSE
-            i = i + 1
-        END IF
-    END WHILE
+Complexity
 
-    // Apply replacements in reverse order
-    SORT replacements BY start DESC
-    highlighted = text
-    
-    FOR EACH (s, e, html) IN replacements DO
-        highlighted = highlighted[:s] + html + highlighted[e:]
-    END FOR
-    
-    RETURN highlighted
-END FUNCTION
+- Notation: let m denote the number of stored labeled embeddings, d the embedding dimensionality, and q the number of queries.
+- Storage / preparation cost (vector storage): O(m · d).
+- Brute‑force inference for q queries: O(q · m · d) (per‑query cost O(m · d)).
 
-2.1.1.5 Relevance to the Application
+Relevance
 
-This algorithm plays a crucial role in SkillHighlight because it determines how effectively the system identifies and emphasizes the user's skills. Accurate detection ensures that users receive reliable feedback on which competencies stand out and which may be underrepresented. By minimizing incorrect highlights and ensuring clean contextual interpretation, the system supports fair, interpretable résumé evaluation aligned with common expectations in professional screening.
+KNN supplies an interpretable, example‑based score that integrates naturally with the embedding representation. For the dataset sizes used in the project, brute‑force KNN with scikit‑learn provides acceptable latency.
 
-2.1.2 K-Nearest Neighbors Classification
+Representative implementation excerpt
 
-The K-Nearest Neighbors classifier is the main decision-making component of SkillHighlight's sentence-level self-promotion scoring. After the system converts each résumé sentence into a vector representation using BERT embeddings, the KNN classifier compares the new sentence with labeled examples to determine whether it reflects strong, weak, or neutral self-promotion. The classifier's ability to draw inferences based on proximity to similar sentences makes it well-suited for evaluating how confidently and effectively a résumé communicates accomplishments.
+The excerpt below is taken verbatim from the system's KNN module. It shows the training/loading logic and the prediction helper used in the codebase.
 
-2.1.2.1 Implications of KNN Classification
-
-KNN's suitability in high-dimensional embedding spaces is supported by current work in text classification and similarity-based analysis. Because it is a non-parametric model, its predictions adapt seamlessly as new training examples are added without requiring retraining of model parameters. This makes it appropriate for résumé analysis systems that continuously expand and refine their datasets. The classifier's interpretability also aligns with explainable AI frameworks, allowing similarity-based justification for each prediction. Given that résumé scoring can affect applicants' perceptions of fairness and quality, having traceable reasoning strengthens transparency. Additionally, SkillHighlight's hybrid scoring strategy—combining KNN similarity with action verb recognition, metric detection, achievement patterns, sentence length heuristics, and polarity shifts—reflects established guidelines in résumé writing research emphasizing quantification, clarity, and assertive phrasing.
-
-2.1.2.2 Formula and Mathematical Computations
-
-Let:
-- m = number of training examples
-- d = embedding dimension (384)
-- q = number of sentences in a résumé
-
-Distance computation for one sentence:
-
-	O(m · d)
-
-Euclidean distance:
-
-			
-
-KNN positive-class probability:
-
-Hybrid scoring function:
-
-	
-
-2.1.2.3 Time Complexity
-
-Per sentence: O(m · d)
-
-Full résumé scoring: O(q · m · d)
-
-Because m and q are both relatively small in typical usage, the system produces results in real time.
-
-2.1.2.4 Pseudocode of KNN Classification
-
-ALGORITHM: KNN_TRAIN_AND_PREDICT
-
-INPUT: csv_path (training csv), model_path (pkl), bert_model
-OUTPUT: knn_model, predict_proba for queries
-
-GLOBAL:
-    K = 5
-
-FUNCTION load_or_train_knn(csv_path, model_path, bert_model):
-    IF FILE_EXISTS(model_path) THEN
-        TRY
-            RETURN JOBLIB_LOAD(model_path)
-        EXCEPT
-            PASS
-        END TRY
-    END IF
-    
-    df = PANDAS_READ_CSV(csv_path)
-    X = batch_encode(df['sentence'].tolist(), bert_model)
-    y = df['label'].astype(int).values
-    knn = KNeighborsClassifier(n_neighbors=K)
+```python
+def load_or_train_knn(model_path="knn_model.pkl", csv_path="self_promotion_dataset.csv"):
+    """
+    Load existing KNN model or train new one from dataset.
+    """
+    if os.path.exists(model_path):
+        try:
+            return joblib.load(model_path)
+        except Exception:
+            pass
+    if not os.path.exists(csv_path):
+        return DummyKNN()
+    df = pd.read_csv(csv_path)
+    bert_model = load_bert_model()
+    X = bert_model.encode(df["sentence"].tolist())
+    y = df["label"].astype(int).values
+    knn = KNeighborsClassifier(n_neighbors=5)
     knn.fit(X, y)
-    JOBLIB_DUMP(knn, model_path)
-    
-    RETURN knn
-END FUNCTION
+    joblib.dump(knn, model_path)
+    return knn
 
-FUNCTION predict_proba(knn, bert_model, queries):
-    Xq = batch_encode(queries, bert_model)
-    RETURN knn.predict_proba(Xq)
-END FUNCTION
 
-2.1.2.5 Relevance to the Application
+def predict_self_promotion_score(sentence, knn_model, bert_model):
+    try:
+        vec = bert_model.encode([sentence])
+        if hasattr(knn_model, "predict_proba"):
+            probs = knn_model.predict_proba(vec)
+            if probs.shape[1] > 1:
+                return float(probs[0][1])
+            return float(probs[0][0])
+        return float(knn_model.predict(vec)[0])
+    except Exception:
+        return 0.0
+```
 
-The KNN classifier determines the strength of the résumé's self-promotional language, helping users evaluate whether their statements are assertive, measurable, and accomplishment-oriented. This is important because many applicants struggle to present their achievements convincingly. By computing similarity to strong and weak examples and enhancing the score through linguistic cues, SkillHighlight helps users rewrite vague or generic statements into impactful, competitive résumé content.
+```python
+# Attempt to load a serialized KNN model; otherwise train from CSV and cache the trained model.
+def load_or_train_knn(model_path="knn_model.pkl", csv_path="self_promotion_dataset.csv"):
+  """
+  Load existing KNN model or train new one from dataset.
+  """
+  # Try loading a cached model to avoid retraining on each run
+  if os.path.exists(model_path):
+    try:
+      return joblib.load(model_path)
+    except Exception:
+      pass
+  # If no dataset is available, return a safe fallback classifier
+  if not os.path.exists(csv_path):
+    return DummyKNN()
+  # Read labeled sentences and labels, then encode with the embedding model
+  df = pd.read_csv(csv_path)
+  bert_model = load_bert_model()
+  X = bert_model.encode(df["sentence"].tolist())  # produces m x d matrix
+  y = df["label"].astype(int).values
+  # Train a scikit-learn KNN classifier and persist it for later reuse
+  knn = KNeighborsClassifier(n_neighbors=5)
+  knn.fit(X, y)
+  joblib.dump(knn, model_path)
+  return knn
 
-2.1.3 BERT Embedding Model
 
-BERT Embedding Generation in SkillHighlight uses the "all-MiniLM-L6-v2" BERT model to convert sentences into 384-dimensional embeddings that capture their semantic meaning. The model processes text through multiple transformer layers, enabling it to understand context, tone, and intent. These embeddings serve as the foundation for both similarity comparison and classification, ensuring that the algorithm evaluates meaning instead of relying on surface-level patterns.
+def predict_self_promotion_score(sentence, knn_model, bert_model):
+  try:
+    # Encode the single query sentence into a 1 x d vector
+    vec = bert_model.encode([sentence])
+    # Prefer probabilistic output when available (predict_proba gives class probabilities)
+    if hasattr(knn_model, "predict_proba"):
+      probs = knn_model.predict_proba(vec)
+      # Return the probability of the positive (self-promotion) class when present
+      if probs.shape[1] > 1:
+        return float(probs[0][1])
+      return float(probs[0][0])
+    # Fallback to deterministic class prediction
+    return float(knn_model.predict(vec)[0])
+  except Exception:
+    # On any failure, return a neutral 0.0 score
+    return 0.0
+```
 
-2.1.3.1 Implications of BERT
+---
 
-Transformer-based models such as BERT have become the standard for semantic text representation due to their ability to understand nuanced language. In résumé analysis, this capability is crucial because the same idea can be expressed with different wording, and strong statements often differ from weak ones only in subtle phrasing. BERT's contextual embeddings allow SkillHighlight to distinguish between sentences like "Led a team of five developers" and "Worked with a team of developers" even though the vocabulary overlaps significantly. This property ensures that the system evaluates statements with human-like semantic awareness, improving fairness and consistency.
+## 2.3 spaCy — Tokenization, Parsing, and Keyword Highlighting
 
-2.1.3.2 Formula and Mathematical Computations
+Description
 
-Mean pooling of token embeddings:
+The repository implements a spaCy‑based module for keyword detection and context validation. The spaCy pipeline is used for tokenization, part‑of‑speech tagging, lemmatization, and sentence segmentation. The highlighting function applies category‑specific heuristics (hard skills, soft skills, recruiter terms, action verbs) and emits HTML spans for presentation.
 
-	
+Pseudocode
 
-Cosine similarity between two embeddings:
+```
+FUNCTION highlight_keywords(nlp, text, keyword_lists):
+  doc = nlp(text)
+  build lookup maps for normalized keywords
+  FOR each token position i in doc:
+    FOR window_length from max_kw_len downto 1:
+      window = tokens[i:i+window_length]
+      IF normalized(window) in lookup:
+        IF context_is_valid(window, category):
+          mark span for highlighting
+          advance i past window
+          BREAK
+  render marked spans into HTML and return
+```
 
-			cos(u, v) = (u · v) / (||u|| × ||v||)
+Complexity
 
-Expanded cosine similarity form:
+- Notation: let n be the number of tokens in the document and m the (small) maximum keyword token length.
+- Tokenization and syntactic parsing with spaCy: O(n).
+- Matching and longest‑first window heuristics: in typical usage near‑linear, but worst‑case behaviour may grow to O(n^2) for adversarial inputs or very large keyword sets; therefore report both O(n) and O(n^2) depending on the phase and input characteristics.
 
-	
+Relevance
 
-2.1.3.3 Time Complexity
+spaCy's syntactic information enables context‑aware filtering that substantially reduces false positives relative to naive substring matching, improving the precision of highlights presented to users.
 
-Let b = constant processing cost per sentence for the BERT model.
+Representative implementation excerpt
 
-Embedding generation for n sentences:
+The excerpt below is taken verbatim from the repository's highlighting module. It shows the public `highlight_keywords` function signature and the initial excluded‑span detection used to avoid highlighting within emails and URLs.
 
-	O(n · b)
+```python
+def highlight_keywords(
+    nlp,
+    text: str,
+    hard_skills: list,
+    soft_skills: list,
+    recruiter_keywords: list,
+    action_verbs: list,
+    disabled_labels=None,
+    token_aligned=True,
+    relax_hard=False,
+    relax_action=False,
+    relax_soft=True,
+    relax_recruiter=True,
+    soft_neg_threshold=-0.1,
+    render_legacy=False
+) -> str:
+    """
+    Highlight keywords in resume text with context validation and HTML rendering.
+    """
+    if disabled_labels is None:
+        disabled_labels = set()
 
-Since the model is lightweight and optimized, embedding computation remains efficient during real-world usage.
+    # Find excluded spans (e.g., emails, URLs) to avoid highlighting inside them
+    excluded = []
+    for m in re.finditer(r"\b[\w\.-]+@[\w\.-]+\.[a-zA-Z]{2,}\b|https?://\S+|www\.\S+", text):
+        excluded.append((m.start(), m.end()))
+```
 
-2.1.3.4 Pseudocode of BERT Embedding
+```python
+# Public function to highlight keywords with spaCy parsing and context heuristics.
+def highlight_keywords(
+  nlp,
+  text: str,
+  hard_skills: list,
+  soft_skills: list,
+  recruiter_keywords: list,
+  action_verbs: list,
+  disabled_labels=None,
+  token_aligned=True,
+  relax_hard=False,
+  relax_action=False,
+  relax_soft=True,
+  relax_recruiter=True,
+  soft_neg_threshold=-0.1,
+  render_legacy=False
+) -> str:
+  """
+  Highlight keywords in resume text with context validation and HTML rendering.
+  """
+  if disabled_labels is None:
+    disabled_labels = set()
 
-ALGORITHM: BERT_EMBEDDING
+  # Detect spans to exclude from matching (emails, URLs); this prevents false positives
+  excluded = []
+  for m in re.finditer(r"\b[\w\.-]+@[\w\.-]+\.[a-zA-Z]{2,}\b|https?://\S+|www\.\S+", text):
+    excluded.append((m.start(), m.end()))
+  # The function continues by building normalized keyword maps, parsing the text with `nlp`,
+  # computing sentence-level features (such as polarity via TextBlob and verb presence),
+  # detecting enumerations, and performing longest-first window matching with category-specific
+  # context validation; matches are converted to HTML spans and returned as an HTML string.
+```
 
-INPUT: sentences (list of strings), model_name (string)
-OUTPUT: embeddings (array)
+---
 
-GLOBAL VARIABLES:
-    model_name = "all-MiniLM-L6-v2"
-    batch_size = 64
+## 2.4 Combined scoring and usage
 
-FUNCTION load_model(name = model_name):
-    model = SentenceTransformer(name)  // cached if using streamlit cache
-    RETURN model
-END FUNCTION
+The implemented system combines the KNN score with explicit keyword counts and heuristic penalties to compute a final sentence score. The production code uses weighted linear combination of the KNN probability and normalized keyword counts, with adjustments for negation or negative sentiment when indicated by the spaCy/TextBlob analysis.
 
-FUNCTION batch_encode(sentences, model, batch_size = batch_size):
-    embeddings = []
-    
-    FOR start = 0 TO LEN(sentences)-1 STEP batch_size DO
-        batch = sentences[start : start + batch_size]
-        emb = model.encode(batch)
-        APPEND emb TO embeddings
-    END FOR
-    
-    RETURN CONCATENATE(embeddings)
-END FUNCTION
+For reproducibility, the exact code excerpts are included above; the repository contains the complete functions referenced here.
 
-2.1.3.5 Relevance to the Application
-
-BERT embeddings ensure that SkillHighlight understands résumé content beyond keyword matching. By interpreting the semantic meaning of each sentence, the system can reliably assess strength of wording, detect achievement-oriented phrasing, and support the KNN classifier with accurate representations. This makes scoring more consistent and aligned with real HR review patterns, ultimately improving the quality of feedback given to users.
-
+---
 
