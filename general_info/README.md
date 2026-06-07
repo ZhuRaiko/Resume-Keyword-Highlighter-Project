@@ -1,231 +1,219 @@
-# Resume Keyword Highlighter - SkillHighlight Analyzer
+# SkillHighlight Analyzer
 
-An intelligent resume analysis tool that highlights keywords, assesses self-promotion quality, and provides actionable insights for resume optimization. Features a modern **brutalist UI design** with custom typography and color-coded keyword categories.
+SkillHighlight Analyzer is a Streamlit application for resume keyword highlighting and self-promotion analysis. It accepts PDF, DOCX, and TXT resumes, extracts and normalizes the text, highlights resume keywords by category, and scores each sentence for achievement-oriented language.
 
-## Features
+This README reflects the current modular implementation in `main_modular.py`, `modules/`, `models/`, and `model_evaluation/`.
 
-- **Smart Keyword Highlighting**: Context-aware detection of Hard Skills, Soft Skills, Recruiter Keywords, and Action Verbs
-- **Self-Promotion Analysis**: ML-powered scoring of resume sentences for achievement-oriented language
-- **Interactive Dashboard**: Real-time visualization with toggle switches to enable/disable keyword categories
-- **Multi-Format Support**: PDF, DOCX, and TXT file processing with PDF→DOCX conversion for consistency
-- **Brutalist UI Design**: Custom Morganite and Deliware fonts with dark theme and color-coded elements
-- **Dynamic Score Visualization**: Gradient colors that change based on self-promotion score
+## Current Status
 
-## UI/UX Features
+- Main app entry point: `main_modular.py`
+- Evaluation entry point: `model_evaluation/evaluate_full_system.py`
+- Latest committed full-system metrics: `model_evaluation/full_system_metrics.json`
+- Training data: `data/self_promotion_dataset.csv`
+- Keyword database: `data/keywords.json`
+- Cached classifier: `models/knn_model.pkl`
 
-### Brutalist Design Theme
-- **Dark Background**: `#0e1117` with sidebar at `#262730`
-- **Custom Typography**: Morganite font for headers (900-500 weights), Deliware for labels
-- **Color-Coded Categories**:
-  - Hard Skills: Teal (#26a69a)
-  - Soft Skills: Purple (#7e57c2)
-  - Recruiter Keywords: Orange (#ff9f43)
-  - Action Verbs: Red (#ef5350)
+## What The App Does
 
-### Interactive Controls
-- **Toggle Switches**: Enable/disable highlighting per category with immediate visual feedback
-- **Progress Bars**: Compact 12px bars showing keyword composition
-- **Dynamic Gradients**: Score block changes from green (>0.8) to yellow (0.5-0.8) to red (<0.5)
+1. Loads spaCy `en_core_web_sm` and SentenceTransformer `all-MiniLM-L6-v2`.
+2. Loads or trains a KNN classifier with `k=5` using 384-dimensional sentence embeddings.
+3. Accepts uploaded resumes in PDF, DOCX, or TXT format, or pasted text.
+4. Extracts and normalizes resume text for more consistent sentence splitting.
+5. Counts keyword matches across four categories:
+   - Hard Skills
+   - Soft Skills
+   - Recruiter Keywords
+   - Action Verbs
+6. Highlights matched keywords with category-specific colors.
+7. Scores each sentence using KNN probability plus resume-specific heuristics.
+8. Displays an average self-promotion score and sentence-level feedback.
 
-## Model Performance
+## UI Features
 
-Our self-promotion classifier achieves strong performance using a K-Nearest Neighbors approach with BERT embeddings:
+- Dark Streamlit interface with custom Morganite and Deliware fonts.
+- Category toggles for Hard Skills, Soft Skills, Recruiter Keywords, and Action Verbs.
+- Sidebar settings for stricter or more relaxed matching behavior.
+- Token-aligned highlighting mode for safer punctuation handling.
+- Sentiment threshold control for soft-skill filtering.
+- Legacy HTML rendering toggle for simpler highlight spans.
+- Dynamic self-promotion score block:
+  - Green when score is greater than `0.8`
+  - Yellow/orange when score is greater than `0.5`
+  - Red when score is `0.5` or lower
 
-### KNN Classifier Performance (80/20 Split)
+## Keyword Colors
 
-| Metric | Score |
-|--------|-------|
-| **Accuracy** | 89.9% |
-| **Precision** | 91.4% |
-| **Recall** | 86.9% |
-| **F1-Score** | 89.1% |
+| Category | Label | Color |
+| --- | --- | --- |
+| Hard Skills | `HARD` | `#26a69a` |
+| Soft Skills | `SOFT` | `#7e57c2` |
+| Recruiter Keywords | `RECRUITER` | `#ff9f43` |
+| Action Verbs | `ACTION` | `#ef5350` |
 
-### Keyword Highlighting Performance (123 Test Cases)
+## Processing Pipeline
 
-| Metric | Score |
-|--------|-------|
-| **Accuracy** | 87.8% |
-| **Precision** | 97.1% |
-| **Recall** | 92.3% |
-| **F1-Score** | 94.6% |
+### 1. Text Extraction
 
-### End-to-End Scoring Performance (65 Test Sentences)
+`modules/extractor.py` handles supported file formats.
 
-| Metric | Score |
-|--------|-------|
-| **Classification Accuracy** | 86.2% |
-| **HIGH Detection** | 90.6% |
-| **LOW Detection** | 81.8% |
-| **Score Separation** | 0.537 |
+- TXT files are decoded directly.
+- PDF files first try PDF-to-DOCX conversion through `pdf2docx`, then extract document-order text with `python-docx`.
+- If PDF-to-DOCX conversion fails, PDF extraction falls back to Docling.
+- If Docling fails, PDF extraction falls back to `pdfminer.six`.
+- DOCX files are read with `python-docx`, with `docx2txt` as a fallback.
 
-### Cross-Validation Results (5-Fold)
+After extraction, `normalize_resume_text()` cleans PDF artifacts, normalizes bullets, preserves skill-list structure, merges obvious continuation lines, and keeps resume sections readable for downstream scoring.
 
-- **Mean F1-Score**: 0.817 (±0.121)
-- Demonstrates consistent performance across different data subsets
+### 2. Keyword Counting
 
-### Dataset Statistics
+`modules/counters.py` counts direct keyword matches from `data/keywords.json`. The displayed percentages represent category composition across all keyword matches. If there are no keyword matches, the function falls back to percentages relative to total word count.
 
-- **Total Samples**: 10,000 labeled resume sentences
-- **Class Distribution**: 
-  - Self-Promotional: 4,730 samples (47.3%)
-  - Neutral/Descriptive: 5,270 samples (52.7%)
-- **Balanced dataset** with diverse resume writing styles for robust training
+### 3. Keyword Highlighting
 
-### Model Configuration
+`modules/highlight.py` uses spaCy tokenization and category-specific context checks before rendering HTML spans. The highlighter avoids matching inside email addresses and URLs, supports token-aligned matching, and can relax checks for hard skills, soft skills, recruiter keywords, and action verbs through sidebar controls.
 
-- **Algorithm**: K-Nearest Neighbors (KNN)
-- **K Value**: 5 neighbors
-- **Embedding Model**: SentenceTransformer (all-MiniLM-L6-v2)
-- **Embedding Dimension**: 384
-- **Distance Metric**: Euclidean (default)
+### 4. Self-Promotion Scoring
 
-## Technical Architecture
+`modules/scoring.py` splits the resume into sentence candidates and scores each sentence with:
 
-### Models & Algorithms (7 Total)
+- KNN self-promotion probability from BERT embeddings.
+- Metric bonus for numbers, percentages, and money-like values.
+- Achievement-pattern bonus for action plus impact language.
+- Bullet bonus for resume-style bullet points.
+- Positive sentiment boost.
+- Action-verb opening bonus.
+- Short-sentence penalty.
 
-#### Deep Learning (2)
-1. **SentenceTransformer (all-MiniLM-L6-v2)** - Sentence embeddings
-   - Time Complexity: O(n·d) per sentence
-2. **spaCy en_core_web_sm** - NLP pipeline (POS, dependency parsing)
-   - Time Complexity: O(n²) for dependency parsing
+Scores are clamped between `0.0` and `1.0`, then averaged for the overall self-promotion score.
 
-#### Traditional ML (1)
-3. **KNeighborsClassifier** - Self-promotion classification
-   - Training: O(m·d) | Prediction: O(m·d) per query
+## Model And Algorithms
 
-#### Rule-Based Algorithms (4)
-4. **Regex Keyword Matching** - Context-aware keyword detection
-   - Time Complexity: O(n·k·L)
-5. **TextBlob Sentiment** - Sentiment polarity scoring
-   - Time Complexity: O(n)
-6. **Achievement Pattern Detection** - Action word + impact detection
-   - Time Complexity: O(n)
-7. **File Extraction** - PDF/DOCX parsing (pdf2docx, Docling, pdfminer)
-   - Time Complexity: O(document size)
+| Component | Implementation | Purpose |
+| --- | --- | --- |
+| Sentence embeddings | SentenceTransformer `all-MiniLM-L6-v2` | Converts sentences into 384-dimensional vectors |
+| NLP parsing | spaCy `en_core_web_sm` | Tokenization, sentence parsing, POS/dependency context |
+| Classification | scikit-learn `KNeighborsClassifier(n_neighbors=5)` | Predicts self-promotion probability |
+| Keyword matching | Regex plus spaCy context checks | Finds category-specific resume keywords |
+| Sentiment | TextBlob | Helps suppress or boost soft-skill and scoring contexts |
+| Extraction | `pdf2docx`, Docling, `pdfminer.six`, `python-docx`, `docx2txt` | Converts uploaded files into plain text |
 
-### Overall Pipeline Complexity
-- **Per-Resume Analysis**: O(n²) dominated by spaCy dependency parsing
-- **Typical Resume**: 200-500 tokens, 20-50 sentences
+## Latest Evaluation Snapshot
 
-## Installation
+These values come from `model_evaluation/full_system_metrics.json`.
+
+| Component | Metric | Value |
+| --- | --- | --- |
+| Text Extraction | Success Rate | 100.0% over 4 files |
+| Keyword Highlighting | Accuracy | 87.8% |
+| Keyword Highlighting | Precision | 97.1% |
+| Keyword Highlighting | Recall | 92.3% |
+| Keyword Highlighting | F1 Score | 94.6% |
+| Self-Promotion Scoring | Accuracy | 86.2% |
+| Self-Promotion Scoring | HIGH Detection | 90.6% |
+| Self-Promotion Scoring | LOW Detection | 81.8% |
+| Self-Promotion Scoring | Score Separation | 0.537 |
+
+The metrics file records an evaluation timestamp of `2025-12-10T18:17:56.694874`.
+
+## Running The App
+
+Install the project dependencies in your Python environment, then download the spaCy model:
 
 ```bash
-# Clone the repository
-git clone https://github.com/ZhuRaiko/Resume-Keyword-Highlighter-Project.git
-cd Resume-Keyword-Highlighter-Project
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Additional packages for UI and PDF processing
-pip install streamlit-toggle-switch pdf2docx
-
-# Download spaCy model
 python -m spacy download en_core_web_sm
 ```
 
-## Usage
-
-### Run the Streamlit App
+Run the Streamlit app:
 
 ```bash
 streamlit run main_modular.py
 ```
 
-### Evaluate Model Performance
+## Running The Evaluation
+
+Run the full evaluation script from the repository root:
 
 ```bash
-python evaluate_model.py
+python model_evaluation/evaluate_full_system.py
 ```
 
-This generates detailed metrics including:
-- Test set performance
-- Cross-validation scores
-- Confusion matrix
-- Classification report
-- Saves results to `model_metrics.json`
+This script evaluates:
+
+- Text extraction success on files in `model_evaluation/test_resumes/`
+- Keyword highlighting precision, recall, F1, and confusion counts
+- Self-promotion scoring accuracy and score separation
+- KNN diagnostic plots, including learning and validation curves
+- BERT embedding visualizations through PCA and UMAP or t-SNE
+
+Generated artifacts are saved in `model_evaluation/`, including `full_system_metrics.json` and PNG figures. See `model_evaluation/README.md` for figure captions.
 
 ## Project Structure
 
-```
+```text
 Resume-Keyword-Highlighter-Project/
-├── main_modular.py              # Main Streamlit application
-├── evaluate_model.py            # Model evaluation script
-│
-├── data/
-│   ├── keywords.json            # Keyword database (4 categories)
-│   └── self_promotion_dataset.csv  # Training data (10,000 samples)
-│
-├── fonts/
-│   ├── Morganite-*.ttf          # Morganite font family
-│   └── deliware-*.otf           # Deliware font family
-│
-├── models/
-│   ├── embedder.py              # BERT embeddings
-│   ├── knn_classifier.py        # KNN classification
-│   ├── knn_model.pkl            # Cached model
-│   └── sentiment.py             # Sentiment analysis
-│
-├── modules/
-│   ├── counters.py              # Keyword metrics
-│   ├── embeddings.py            # Embedding utilities
-│   ├── extractor.py             # Text extraction (PDF→DOCX)
-│   ├── highlight.py             # Keyword highlighting
-│   └── scoring.py               # Self-promotion scoring
-│
-└── backups/                     # Legacy versions
+|-- main_modular.py
+|-- data/
+|   |-- keywords.json
+|   `-- self_promotion_dataset.csv
+|-- fonts/
+|   |-- Morganite-*.ttf
+|   `-- deliware-*.otf
+|-- models/
+|   |-- embedder.py
+|   |-- knn_classifier.py
+|   |-- knn_model.pkl
+|   `-- sentiment.py
+|-- modules/
+|   |-- counters.py
+|   |-- embeddings.py
+|   |-- extractor.py
+|   |-- highlight.py
+|   `-- scoring.py
+|-- model_evaluation/
+|   |-- evaluate_full_system.py
+|   |-- full_system_metrics.json
+|   |-- README.md
+|   `-- test_resumes/
+|-- backups/
+`-- general_info/
+    `-- README.md
 ```
 
-## Dependencies
+## Key Dependencies
 
-- **streamlit** - Web interface
-- **streamlit-toggle-switch** - Custom toggle switches
-- **sentence-transformers** - BERT embeddings
-- **spacy** - NLP pipeline
-- **scikit-learn** - KNN classifier
-- **textblob** - Sentiment analysis
-- **pdf2docx** - PDF to DOCX conversion (primary)
-- **docling** - PDF text extraction (fallback #1)
-- **pdfminer.six** - PDF text extraction (fallback #2)
-- **python-docx** - DOCX processing
-- **pandas, numpy** - Data processing
+- `streamlit`
+- `streamlit-toggle-switch`
+- `sentence-transformers`
+- `spacy`
+- `scikit-learn`
+- `textblob`
+- `pdf2docx`
+- `docling`
+- `pdfminer.six`
+- `python-docx`
+- `docx2txt`
+- `pandas`
+- `numpy`
+- `matplotlib`
 
-## Key Features Explained
+Note: this repository currently does not include a root `requirements.txt`. The evaluation folder includes `model_evaluation/requirements_frozen.txt` for the evaluation environment.
 
-### PDF→DOCX Conversion
-For consistent text extraction across formats, PDFs are converted to DOCX before processing. This ensures identical scoring results regardless of input format.
+## Consistency Notes
 
-### Toggle-Based Highlighting
-Each keyword category can be independently enabled/disabled with immediate visual feedback. Toggles trigger a page rerun to update highlighting in real-time.
+The general documentation is now aligned with these current repository facts:
 
-### Dynamic Score Gradients
-The self-promotion score block uses color gradients to communicate quality:
-- **Green** (>0.8): Excellent self-promotion
-- **Yellow/Orange** (0.5-0.8): Good, with room for improvement
-- **Red** (<0.5): Needs stronger achievement language
+- The active app file is `main_modular.py`, not a legacy backup script.
+- The active full-system evaluation command is `python model_evaluation/evaluate_full_system.py`.
+- The repository does not currently contain `evaluate_model.py`, even though some older evaluation documentation still references it.
+- PDF extraction is best described as a primary PDF-to-DOCX path with Docling and pdfminer fallbacks, not as a single guaranteed conversion path.
+- The UI includes sidebar controls for matching strictness, sentiment threshold, token alignment, and rendering mode.
+- The README performance numbers match `model_evaluation/full_system_metrics.json`.
 
 ## Future Enhancements
 
-- [ ] Export highlighted resumes (HTML/PDF)
-- [ ] ATS keyword matching score
-- [ ] Industry-specific keyword sets
-- [ ] Resume format validation
-- [ ] Job description comparison mode
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-This project is licensed under the MIT License.
-
-## Authors
-
-- **ZhuRaiko** - [GitHub Profile](https://github.com/ZhuRaiko)
-
-## Acknowledgments
-
-- spaCy for NLP infrastructure
-- Sentence-Transformers for embedding models
-- Streamlit for the web framework
+- Export highlighted resumes as HTML or PDF.
+- Add job-description comparison mode.
+- Add industry-specific keyword sets.
+- Add ATS-style keyword coverage scoring.
+- Add a root dependency file for easier setup.
+- Consolidate older evaluation docs that still reference removed or renamed scripts.
