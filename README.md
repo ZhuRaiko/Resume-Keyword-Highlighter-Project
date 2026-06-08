@@ -11,6 +11,8 @@ pinned: false
 short_description: Resume keyword highlighting and self-promotion analyzer.
 ---
 
+To HuggingFace Space: https://huggingface.co/spaces/sinthia1/Resume-Keyword-Highlighter
+
 # SkillHighlight Analyzer
 
 SkillHighlight Analyzer is a Streamlit app that reviews resumes by highlighting hard skills, soft skills, recruiter keywords, and action verbs. It also scores sentence-level self-promotion so users can strengthen achievement-focused language.
