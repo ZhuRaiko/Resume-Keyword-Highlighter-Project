@@ -6,7 +6,60 @@ This project is a Streamlit app, so the recommended deployment target is Streaml
 
 Vercel is mainly optimized for frontend frameworks and serverless functions. This project runs as a long-lived Streamlit Python app, which expects Streamlit's own server process.
 
-Use Streamlit Community Cloud, Render, Railway, Hugging Face Spaces, or another Python app host instead.
+Use Hugging Face Spaces, Streamlit Community Cloud, Render, Railway, or another Python app host instead.
+
+## Recommended Alternative: Hugging Face Spaces
+
+Hugging Face Spaces is a good fit for this project because it is an ML demo app. For Streamlit apps, use a Docker Space.
+
+### Create The Space
+
+1. Go to Hugging Face.
+2. Open **Spaces**.
+3. Click **Create new Space**.
+4. Choose a Space name.
+5. Choose visibility: Public or Private.
+6. Choose **Docker** as the SDK.
+7. Create the Space.
+
+### Use This Repo
+
+You have two common options:
+
+1. Upload or push this repository's files into the Space repository.
+2. Connect/sync from GitHub if you prefer managing the source in GitHub.
+
+The important files for Hugging Face Spaces are:
+
+```text
+Dockerfile
+.dockerignore
+requirements.txt
+main_modular.py
+.streamlit/config.toml
+```
+
+The Dockerfile runs:
+
+```bash
+streamlit run main_modular.py --server.address=0.0.0.0 --server.port=8501 --server.enableXsrfProtection=false --server.enableCORS=false
+```
+
+The XSRF/CORS flags are included because this app uses file upload, and Streamlit file upload can be affected by iframe/cookie restrictions on Hugging Face Spaces when using Docker.
+
+### Hugging Face App Port
+
+The Dockerfile exposes port `8501`, which is Streamlit's default port.
+
+If Hugging Face asks for an app port in Space settings, use:
+
+```text
+8501
+```
+
+### First Build
+
+The first Hugging Face build can take a while because it installs NLP and ML dependencies. Later rebuilds should be easier unless dependency files change.
 
 ## Recommended Deployment: Streamlit Community Cloud
 
@@ -90,4 +143,3 @@ Check these first:
 If the app fails while loading spaCy, check whether the `en_core_web_sm` line in `requirements.txt` installed successfully.
 
 If the app fails while processing PDFs, try DOCX or pasted text first. PDF extraction depends heavily on the PDF's formatting.
-

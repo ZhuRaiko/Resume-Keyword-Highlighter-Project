@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+.git/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+model_evaluation/*.png
+model_evaluation/*.log
+model_evaluation/__pycache__/
+modules/__pycache__/
+models/__pycache__/
+
+backups/
+Vinzy Group, SkillHighlight.docx
+Vinzy Group, SkillHighlight.pdf
