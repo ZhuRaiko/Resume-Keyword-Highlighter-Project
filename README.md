@@ -1,14 +1,14 @@
 ---
-title: Streamlit Template Space
+title: Resume Keyword Highlighter
 emoji: 🚀
 colorFrom: red
 colorTo: red
 sdk: docker
 app_port: 8501
 tags:
-  - streamlit
+- streamlit
 pinned: false
-short_description: Streamlit template space
+short_description: SkillHighlight Analyzer is a resume review app that highligh
 ---
 
 # Welcome to Streamlit!
